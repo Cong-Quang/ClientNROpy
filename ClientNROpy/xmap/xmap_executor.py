@@ -131,20 +131,23 @@ class XmapExecutor:
             npc_id = int(map_next.info[0])
 
             if npc_id == 38:
-                is_npc_found = any(npc.get("template_id") == 38 for npc in client.myChar.mapInfo.npcs)
-                if not is_npc_found:
-                    import random
-                    map_id = client.myChar.mapInfo.mapID
-                    wp_target = 28 if map_id in (27, 29) else (27 if random.randint(27, 28) == 27 else 29)
-                    wp = XmapExecutor.find_waypoint_for_target(client, wp_target)
-                    if wp:
-                        cx = wp.minX + (wp.maxX - wp.minX) // 2
-                        if wp.maxX < 60: cx = 15
-                        elif wp.minX > 1500: cx = wp.minX + 15
-                        XmapExecutor.TeleportMyChar(client, cx, wp.maxY)
-                        if wp.isOffline: client.service.getMapOffline()
-                        else: client.service.requestChangeMap()
-                    return True
+                curr_mid = client.myChar.mapInfo.mapID
+                # NPC 38 chỉ di chuyển qua 3 map tại Trái Đất (27, 28, 29). Tại map 102 thì luôn cố định.
+                if curr_mid in (27, 28, 29):
+                    is_npc_found = any(npc.get("template_id") == 38 for npc in client.myChar.mapInfo.npcs)
+                    if not is_npc_found:
+                        import random
+                        wp_target = 28 if curr_mid in (27, 29) else (27 if random.randint(27, 28) == 27 else 29)
+                        wp = XmapExecutor.find_waypoint_for_target(client, wp_target)
+                        if wp:
+                            cx = wp.minX + (wp.maxX - wp.minX) // 2
+                            if wp.maxX < 60: cx = 15
+                            elif wp.minX > 1500: cx = wp.minX + 15
+                            print(f"[Xmap] [NPC 38] Chưa thấy ở Map {curr_mid}. Tuần tra tìm sang Map {wp_target}...")
+                            XmapExecutor.TeleportMyChar(client, cx, wp.maxY)
+                            if wp.isOffline: client.service.getMapOffline()
+                            else: client.service.requestChangeMap()
+                        return True
 
             # Teleport to NPC first
             npc = None
@@ -166,6 +169,16 @@ class XmapExecutor:
                     received_options.extend(options)
                     menu_event.set()
 
+            transport_event = threading.Event()
+            transport_info = {}
+            def on_trans(max_time, trans_type):
+                transport_info["max_time"] = max_time
+                transport_info["type"] = trans_type
+                transport_event.set()
+
+            if npc_id == 38:
+                client.controller.on_transport_callbacks.append(on_trans)
+
             client.controller.on_npc_menu_callbacks.append(on_npc_menu)
             try:
                 # Open menu
@@ -173,10 +186,10 @@ class XmapExecutor:
                 client.service.openMenu(npc_id)
                 
                 # Chờ menu mở (chống lag/chống shuffle index)
-                if menu_event.wait(timeout=2.0):
+                if menu_event.wait(timeout=2.5):
                     matched_idx = -1
                     
-                    # 1. Khớp theo keyword từ dữ liệu (ví dụ: 'namec', 'xayda', 'trái đất')
+                    # 1. Khớp theo keyword từ dữ liệu (ví dụ: 'tương lai', 'quá khứ', 'namec', 'xayda', 'trái đất')
                     hint_keywords = [normalize_str(s) for s in map_next.info[1:] if isinstance(s, str) and not str(s).isdigit()]
                     for i, opt in enumerate(received_options):
                         opt_norm = normalize_str(opt)
@@ -193,9 +206,9 @@ class XmapExecutor:
                                 matched_idx = i
                                 break
 
-                    # 3. Khớp theo từ khoá chung (đã loại bỏ 'đến', 'đi' để tránh nhầm lẫn)
+                    # 3. Khớp theo từ khoá chung
                     if matched_idx == -1:
-                        keywords = ["tàu vũ trụ", "trạm", "về nhà", "bay", "cold"]
+                        keywords = ["tàu vũ trụ", "trạm", "về nhà", "bay", "cold", "tương lai", "quá khứ"]
                         for i, opt in enumerate(received_options):
                             opt_norm = normalize_str(opt)
                             if any(kw in opt_norm for kw in keywords):
@@ -221,10 +234,24 @@ class XmapExecutor:
                         except ValueError:
                             idx_to_send = 0
                         client.service.confirmMenu(npc_id, idx_to_send)
+
+                # Xử lý tăng tốc tàu thời gian (cmd -105) nếu là NPC 38
+                if npc_id == 38:
+                    if transport_event.wait(timeout=3.0):
+                        is_speedup = getattr(client.xmap_controller, "is_auto_speedup", True)
+                        if is_speedup:
+                            print("[Xmap] [NPC 38] Đang bay tàu thời gian -> Kích hoạt tăng tốc (cmd -105, 1 ngọc)...")
+                            time.sleep(0.1)
+                            client.service.transportNow()
+                        else:
+                            max_t = transport_info.get("max_time", 60)
+                            print(f"[Xmap] [NPC 38] Chờ tàu bay tự động (không tăng tốc, tối đa {max_t}s)...")
                 return True
             finally:
                 if on_npc_menu in client.controller.on_npc_menu_callbacks:
                     client.controller.on_npc_menu_callbacks.remove(on_npc_menu)
+                if npc_id == 38 and on_trans in client.controller.on_transport_callbacks:
+                    client.controller.on_transport_callbacks.remove(on_trans)
 
         # 3. Chuyển map qua NpcPanel
         elif next_type == TypeMapNext.NpcPanel:

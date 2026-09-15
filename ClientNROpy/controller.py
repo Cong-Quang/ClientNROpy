@@ -63,6 +63,8 @@ class Controller(IMessageHandler):
         self.on_npc_menu_callbacks: List[Callable[[int, str, List[str]], None]] = []
         # Callback quái bị hạ (mob_template_id)
         self.on_mob_killed_callbacks: List[Callable[[int], None]] = []
+        # Callback tàu vũ trụ / tàu thời gian (cmd -105: max_time, trans_type)
+        self.on_transport_callbacks: List[Callable[[int, int], None]] = []
 
     @classmethod
     def gI(cls) -> "Controller":
@@ -247,6 +249,22 @@ class Controller(IMessageHandler):
                         cb(chat_vip)
                     except Exception as ex:
                         print(f"[Controller] on_chat_vip callback error: {ex}")
+                return
+
+            # ------------------------------------------------------------------
+            # 4c. MÀN HÌNH TÀU VŨ TRỤ / TÀU THỜI GIAN (cmd -105: TransportScr)
+            # ------------------------------------------------------------------
+            if cmd == -105:
+                try:
+                    max_time = msg.reader().readShort()
+                    trans_type = msg.reader().readByte()
+                    for cb in self.on_transport_callbacks:
+                        try:
+                            cb(max_time, trans_type)
+                        except Exception as ex:
+                            print(f"[Controller] on_transport_callback error: {ex}")
+                except Exception as ex:
+                    print(f"[Controller] cmd -105 parse error: {ex}")
                 return
 
             # ------------------------------------------------------------------

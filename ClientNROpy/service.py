@@ -360,3 +360,11 @@ class Service:
         except Exception as ex:
             print(f"[Service] pickItem error: {ex}")
 
+    def transportNow(self) -> None:
+        """Gửi lệnh tăng tốc tàu thời gian / vũ trụ (cmd -105 trong C# Service.cs, tốn 1 ngọc)."""
+        try:
+            m = Message(-105)
+            self.session.sendMessage(m)
+        except Exception as ex:
+            print(f"[Service] transportNow error: {ex}")
+

@@ -5,6 +5,8 @@ Lớp điều khiển cấp cao (ClientNRO).
 thành một API dễ sử dụng cho các tool và bot game headless.
 """
 
+import threading
+import time
 from typing import Optional, List, Callable, Union, Tuple, Any, Dict
 from .session import Session_ME
 from .controller import Controller
@@ -60,6 +62,9 @@ class ClientNRO:
 
         # Auto nhiệm vụ Bò Mộng hằng ngày (AutoQuest FSM)
         self.auto_quest: AutoQuest = AutoQuest(self)
+
+        # Shuttle tự động di chuyển qua lại 2 map (ShuttleManager)
+        self.shuttle_manager: ShuttleManager = ShuttleManager(self)
 
 
 
@@ -399,5 +404,115 @@ class ClientNRO:
     def get_quest_status(self) -> Dict[str, Any]:
         """Lấy trạng thái auto nhiệm vụ Bò Mộng."""
         return self.auto_quest.get_status()
+
+    # --------------------------------------------------------------------------
+    # AUTO SHUTTLE (Di chuyển qua lại giữa 2 map)
+    # --------------------------------------------------------------------------
+    def start_shuttle(self, map_a: int, map_b: int, rounds: int = 0) -> bool:
+        """Bắt đầu tự động di chuyển qua lại giữa 2 map (A <-> B)."""
+        return self.shuttle_manager.start(map_a, map_b, rounds)
+
+    def stop_shuttle(self) -> None:
+        """Dừng di chuyển qua lại 2 map."""
+        self.shuttle_manager.stop()
+
+    def get_shuttle_status(self) -> Dict[str, Any]:
+        """Lấy thông tin trạng thái shuttle hiện tại."""
+        return self.shuttle_manager.get_status()
+
+
+class ShuttleManager:
+    """Quản lý tiến trình di chuyển liên tục qua lại giữa 2 map."""
+
+    def __init__(self, client: "ClientNRO"):
+        self.client: "ClientNRO" = client
+        self.is_running: bool = False
+        self.map_a: Optional[int] = None
+        self.map_b: Optional[int] = None
+        self.rounds: int = 0
+        self.legs_done: int = 0
+        self.current_target: Optional[int] = None
+        self.status_message: str = "Đã dừng"
+        self._thread: Optional[threading.Thread] = None
+        self._lock: threading.RLock = threading.RLock()
+
+    def start(self, map_a: int, map_b: int, rounds: int = 0) -> bool:
+        if map_a == map_b:
+            return False
+        with self._lock:
+            self.is_running = False
+            self.map_a = map_a
+            self.map_b = map_b
+            self.rounds = rounds
+            self.legs_done = 0
+            self.is_running = True
+            self.status_message = "Đang khởi động"
+            self._thread = threading.Thread(target=self._run_loop, daemon=True)
+            self._thread.start()
+            return True
+
+    def stop(self) -> None:
+        with self._lock:
+            self.is_running = False
+            self.status_message = "Đã dừng"
+
+    def get_status(self) -> Dict[str, Any]:
+        from .xmap.map_data import get_map_name
+        return {
+            "is_running": self.is_running,
+            "map_a": f"{get_map_name(self.map_a)} ({self.map_a})" if self.map_a is not None else "?",
+            "map_b": f"{get_map_name(self.map_b)} ({self.map_b})" if self.map_b is not None else "?",
+            "legs_done": self.legs_done,
+            "rounds": self.rounds,
+            "current_target": f"{get_map_name(self.current_target)} ({self.current_target})" if self.current_target is not None else "Không",
+            "status_message": self.status_message,
+        }
+
+    def _run_loop(self) -> None:
+        from .xmap.map_data import get_map_name
+        try:
+            time.sleep(0.5)
+            while self.is_running:
+                curr_map = self.client.myChar.mapInfo.mapID
+                # Quyết định map tiếp theo
+                if curr_map == self.map_a:
+                    target = self.map_b
+                elif curr_map == self.map_b:
+                    target = self.map_a
+                else:
+                    target = self.map_a
+
+                self.current_target = target
+                t_name = get_map_name(target)
+                self.status_message = f"Đang di chuyển tới {t_name} ({target})"
+                print(f"\n[Shuttle] >>> Lượt {self.legs_done + 1}: Chuyển map từ {curr_map} ({get_map_name(curr_map)}) tới {t_name} (ID: {target})...", flush=True)
+
+                self.client.xmap(target)
+                time.sleep(1.0)
+
+                # Chờ đến đích
+                while self.is_running:
+                    time.sleep(0.5)
+                    if self.client.myChar.mapInfo.mapID == target and not self.client.xmap_controller.is_acting:
+                        break
+
+                if not self.is_running:
+                    break
+
+                self.legs_done += 1
+                print(f"[Shuttle] [Lượt {self.legs_done}] Đã đến thành công {t_name} (ID: {target})!", flush=True)
+
+                if self.rounds > 0 and self.legs_done >= self.rounds:
+                    print(f"[Shuttle] Hoàn thành đủ {self.rounds} lượt!", flush=True)
+                    self.is_running = False
+                    self.status_message = f"Hoàn thành {self.rounds} lượt"
+                    break
+
+                time.sleep(2.0)
+        except Exception as ex:
+            print(f"[Shuttle] Lỗi ngoại lệ trong ShuttleManager: {ex}", flush=True)
+            import traceback
+            traceback.print_exc()
+            self.is_running = False
 
 

@@ -40,7 +40,7 @@ RAW_LINK_MAPS_XMAP = """
 27 102 1 38 tương_lai
 28 102 1 38 tương_lai
 29 102 1 38 tương_lai
-102 24 1 38 tàu_vũ_trụ
+102 24 1 38 quá_khứ
 
 # Thành phố Vegeta - Thành phố Santa
 19 126 1 53 santa

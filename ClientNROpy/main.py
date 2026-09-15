@@ -188,7 +188,7 @@ def print_map_and_zones(map_info: MapInfo):
             print(f"  - {wp.name}: ({wp.minX},{wp.minY}) -> ({wp.maxX},{wp.maxY})")
 
 
-def run_client(host="51.79.163.109", port=12457, username="poopooi02", password="02082003", version="2.1.4"):
+def run_client(host="51.79.163.109", port=12457, username="poopooi01", password="02082003", version="2.1.4"):
     print_banner()
     print(f"[*] Kết nối tới máy chủ: {host}:{port} (phiên bản {version})")
     print(f"[*] Đăng nhập tài khoản: '{username}'")
@@ -208,7 +208,24 @@ def run_client(host="51.79.163.109", port=12457, username="poopooi02", password=
     client.on_zone_info(on_zone_info)
 
     client.on_server_message(lambda text: print(f"[THÔNG BÁO TỪ SERVER] {text}"))
-    client.on_chat(lambda cid, text: print(f"[CHAT MAP {cid}] {text}"))
+
+    _last_chat = {}
+
+    def _on_chat_throttled(cid, text):
+        # Bỏ qua tin lặp y hệt trong 10s (NPC spam thoại che ô nhập lệnh)
+        import time as _t
+        key = (cid, text)
+        now = _t.monotonic()
+        if _last_chat.get(key, 0.0) + 10.0 > now:
+            return
+        _last_chat[key] = now
+        # Dọn entry cũ để dict không phình
+        if len(_last_chat) > 50:
+            _last_chat.clear()
+            _last_chat[key] = now
+        print(f"[CHAT MAP {cid}] {text}")
+
+    client.on_chat(_on_chat_throttled)
 
     def on_vip_msg(cv: ChatVip):
         if cv.is_boss:
@@ -289,6 +306,8 @@ def print_cli_help():
     print("  hunt clear                  : Xóa toàn bộ Whitelist (quay về săn tất cả)")
     print("-" * 65)
     print("  captest                     : Test xài capsule ĐB (194), in panel map server trả về")
+    print("  npcs                        : Liệt kê NPC trong map hiện tại")
+    print("  npctest <npc> [chon...]     : Mở menu NPC và in nội dung (vd: npctest 25)")
     print("  [AUTO NHIỆM VỤ BÒ MỘNG HẰNG NGÀY]")
     print("  nvbm [on|off|status]      : Bật / Tắt / Xem auto NV Bò Mộng (farm + trả NV)")
     print("-" * 65)
@@ -304,8 +323,11 @@ def print_cli_help():
     print("  xmap status                 : Xem trạng thái, tiến độ và cấu hình Capsule")
     print("  xmap csvip                  : Bật / Tắt sử dụng Capsule Đặc Biệt (bay nhanh)")
     print("  xmap cs                     : Bật / Tắt sử dụng Capsule Thường (bay nhanh)")
+    print("  xmap speedup                : Bật / Tắt tự tăng tốc tàu thời gian (tốn 1 ngọc, mặc định BẬT)")
     print("  xmap path <from> <to>       : Tra cứu lộ trình tối ưu giữa 2 map (vd: xmap path 0 109)")
     print("  xmap list                   : Xem danh sách các nhóm bản đồ")
+    print("  shuttle <A> <B> [vòng]      : Tự đi qua lại giữa 2 map (vd: shuttle 92 27, vòng=0 là vô hạn)")
+    print("  shuttle stop / status       : Dừng / xem trạng thái shuttle")
     print("-" * 65)
     print("  [TIỆN ÍCH KHÁC]")
     print("  map                         : Xem thông tin bản đồ hiện tại, tọa độ và waypoints")
@@ -365,6 +387,20 @@ def print_quest_status(client: ClientNRO):
             print("- Chú ý: Capsule đang bị TỰ TẮT do kẹt (sẽ đi bộ). Gõ lại xmap/nvbm để thử lại.")
     except Exception:
         pass
+    print("=" * 65 + "\n")
+
+
+def print_shuttle_status(client: ClientNRO):
+    """In bảng trạng thái shuttle qua lại 2 map."""
+    st = client.get_shuttle_status()
+    print("\n" + "=" * 65)
+    print("        BẢNG TRẠNG THÁI SHUTTLE QUA LẠI 2 MAP        ")
+    print("=" * 65)
+    print(f"- Hoạt động:             {'ĐANG BẬT [ON]' if st['is_running'] else 'ĐÃ TẮT [OFF]'}")
+    print(f"- Tuyến:                 {st['map_a']} <-> {st['map_b']}")
+    print(f"- Đã đi:                 {st['legs_done']} lượt" + (f"/{st['rounds']}" if st['rounds'] else " (vô hạn)"))
+    print(f"- Đích hiện tại:         {st['current_target']}")
+    print(f"- Trạng thái:            {st['status_message']}")
     print("=" * 65 + "\n")
 
 
@@ -574,6 +610,66 @@ def interactive_cli(client: ClientNRO):
             for i, nm in enumerate(names[:40]):
                 print(f"    [{i}] {nm}")
 
+        elif cmd in ("npcs", "npc"):
+            npcs = client.myChar.mapInfo.npcs
+            print(f"[*] NPC trong map '{client.myChar.mapInfo.mapName}' ({len(npcs)}):")
+            for n in npcs:
+                print(f"    - template {n.get('template_id')} tại ({n.get('x')},{n.get('y')}) "
+                      f"avatar={n.get('avatar')} status={n.get('status')}")
+
+        elif cmd in ("npctest", "menutest", "testnpc"):
+            if not args:
+                print("Cú pháp: npctest <npc_template_id> [select...] (vd: npctest 25)")
+            else:
+                try:
+                    tid = int(args[0])
+                except ValueError:
+                    print("npc_template_id phải là số.")
+                    tid = None
+                if tid is not None:
+                    captured = {}
+                    def _cap(t_id, text, opts):
+                        captured["t"] = t_id
+                        captured["text"] = text
+                        captured["opts"] = list(opts)
+                    client.controller.on_npc_menu_callbacks.append(_cap)
+                    client.controller.debug = True
+                    print(f"[*] Mở menu NPC {tid}...")
+                    client.service.openMenu(tid)
+                    time.sleep(3.0)
+                    for a in args[1:]:
+                        try:
+                            client.service.confirmMenu(tid, int(a))
+                            time.sleep(1.5)
+                        except ValueError:
+                            pass
+                    client.controller.debug = False
+                    try:
+                        client.controller.on_npc_menu_callbacks.remove(_cap)
+                    except ValueError:
+                        pass
+                    if captured:
+                        print(f"[*] Menu NPC {captured['t']}: {captured['text'][:300]}")
+                        for i, o in enumerate(captured["opts"]):
+                            print(f"    [{i}] {o}")
+                    else:
+                        print("[*] Server không trả menu (NPC vắng/không nói chuyện được).")
+
+        elif cmd in ("shuttle", "shut", "dual"):
+            if not args or (len(args) == 1 and args[0].lower() in ("status", "st", "info")):
+                print_shuttle_status(client)
+            elif len(args) == 1 and args[0].lower() in ("stop", "off", "0", "false"):
+                client.stop_shuttle()
+                print("[*] Shuttle: TẮT!")
+            elif len(args) >= 2 and args[0].lstrip("-").isdigit() and args[1].lstrip("-").isdigit():
+                rounds = 0
+                if len(args) >= 3 and args[2].isdigit():
+                    rounds = int(args[2])
+                ok = client.start_shuttle(int(args[0]), int(args[1]), rounds)
+                print(f"[*] Shuttle {args[0]} <-> {args[1]}: {'BẬT!' if ok else 'THẤT BẠI (2 map phải khác nhau)!'}")
+            else:
+                print("Cú pháp: shuttle <mapA> <mapB> [số_vòng] | shuttle stop | shuttle status")
+
         elif cmd in ("nvbm", "nhiemvu", "quest", "bomong"):
             # Quét mọi token để chịu được nhập dính chữ khi console bị log nền xen vào
             subs = [a.lower().strip(".,;:!?") for a in args]
@@ -719,6 +815,7 @@ def interactive_cli(client: ClientNRO):
                     print(f"    Tiến độ:         Chặng {st['current_step']}/{st['total_steps']}")
                 print(f"    Capsule Đặc Biệt: {st['capsule_vip']} (Có trong Balo: {st['has_capsule_vip']})")
                 print(f"    Capsule Thường:   {st['capsule_normal']} (Có trong Balo: {st['has_capsule_normal']})")
+                print(f"    Tăng tốc tàu thời gian: {st.get('auto_speedup', '?')} (tốn 1 ngọc)")
 
             elif sub in ("csvip", "csdb", "capsule"):
                 is_on = client.xmap_controller.toggle_use_capsule_vip()
@@ -727,6 +824,10 @@ def interactive_cli(client: ClientNRO):
             elif sub in ("cs", "xcsb", "capsule_thuong"):
                 is_on = client.xmap_controller.toggle_use_capsule_normal()
                 print(f"[*] Đã {'BẬT' if is_on else 'TẮT'} sử dụng Capsule Thường!")
+
+            elif sub in ("speedup", "speed", "nhanh"):
+                is_on = client.xmap_controller.toggle_auto_speedup()
+                print(f"[*] Tự tăng tốc tàu thời gian: {'BẬT (tốn 1 ngọc/lượt)!' if is_on else 'TẮT (chờ miễn phí ~10s)!'}")
 
             elif sub == "path":
                 if len(args) < 3:
@@ -778,7 +879,7 @@ if __name__ == "__main__":
     # Đọc cấu hình kết nối
     host = "51.79.163.109"
     port = 12457
-    user = "poopooi02"
+    user = "poopooi01"
     pwd = "02082003"
     ver = "2.1.4"
     auto_xmap_target = None

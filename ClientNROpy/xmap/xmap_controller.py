@@ -36,6 +36,7 @@ class XmapController:
         # Cấu hình sử dụng Capsule (mô phỏng Pk9rXmap trong Dragonboy C#)
         self.is_use_capsule_vip: bool = True         # Mặc định BẬT Capsule Đặc Biệt (ID 194)
         self.is_use_capsule_normal: bool = False      # Mặc định TẮT Capsule Thường (ID 193)
+        self.is_auto_speedup: bool = True            # Mặc định BẬT tăng tốc tàu thời gian (1 ngọc)
 
         self._thread: Optional[threading.Thread] = None
         self._lock: threading.Lock = threading.Lock()
@@ -79,6 +80,13 @@ class XmapController:
         self._log(f"Sử dụng Capsule Thường: {st}")
         return self.is_use_capsule_normal
 
+    def toggle_auto_speedup(self) -> bool:
+        """Bật/tắt tự động tăng tốc tàu tương lai (tốn 1 ngọc, mặc định BẬT)."""
+        self.is_auto_speedup = not self.is_auto_speedup
+        st = "BẬT (tốn 1 ngọc)" if self.is_auto_speedup else "TẮT (chờ miễn phí)"
+        self._log(f"Tự động tăng tốc tàu thời gian: {st}")
+        return self.is_auto_speedup
+
     def _log(self, msg: str) -> None:
         self.status_message = msg
         print(f"[Xmap] {msg}")
@@ -104,6 +112,7 @@ class XmapController:
             "has_capsule_vip": self.has_item_capsule_vip(),
             "capsule_normal": "BẬT" if self.is_use_capsule_normal else "TẮT",
             "has_capsule_normal": self.has_item_capsule_normal(),
+            "auto_speedup": "BẬT" if self.is_auto_speedup else "TẮT",
         }
 
     def find_path(self, start_map: int, end_map: int, use_capsule: bool = True) -> Optional[List[MapNext]]:
@@ -292,9 +301,18 @@ class XmapController:
                     time.sleep(0.3)
                     continue
 
-                # 5. Lệch khỏi lộ trình (bị dịch chuyển, chết về nhà, rơi vào map khác)
+                # 5. Lệch khỏi lộ trình (bị dịch chuyển, chết về nhà, tuần tra NPC 38, rơi vào map khác)
                 else:
-                    self._log(f"Vị trí hiện tại ({curr_map}) lệch khỏi lộ trình! Tự động tính toán lại đường đi...")
+                    is_patrol_npc38 = (
+                        self.way and self.index_way < len(self.way)
+                        and self.way[self.index_way].info
+                        and self.way[self.index_way].info[0] == 38
+                        and curr_map in (27, 28, 29)
+                    )
+                    if is_patrol_npc38:
+                        self._log(f"Đã sang Map {curr_map} ({get_map_name(curr_map)}) để tìm NPC 38. Cập nhật lộ trình...")
+                    else:
+                        self._log(f"Vị trí hiện tại ({curr_map}) lệch khỏi lộ trình! Tự động tính toán lại đường đi...")
                     self.way = None
                     self.index_way = 0
                     time.sleep(0.5)
