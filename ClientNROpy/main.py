@@ -188,7 +188,7 @@ def print_map_and_zones(map_info: MapInfo):
             print(f"  - {wp.name}: ({wp.minX},{wp.minY}) -> ({wp.maxX},{wp.maxY})")
 
 
-def run_client(host="51.79.163.109", port=12457, username="poopooi02", password="02082003", version="2.1.4"):
+def run_client(host="51.79.163.109", port=12457, username="poopooi01", password="02082003", version="2.1.4"):
     print_banner()
     print(f"[*] Kết nối tới máy chủ: {host}:{port} (phiên bản {version})")
     print(f"[*] Đăng nhập tài khoản: '{username}'")
@@ -288,6 +288,10 @@ def print_cli_help():
     print("  hunt revive                 : Bật / Tắt tự hồi sinh và quay lại map Boss")
     print("  hunt clear                  : Xóa toàn bộ Whitelist (quay về săn tất cả)")
     print("-" * 65)
+    print("  captest                     : Test xài capsule ĐB (194), in panel map server trả về")
+    print("  [AUTO NHIỆM VỤ BÒ MỘNG HẰNG NGÀY]")
+    print("  nvbm [on|off|status]      : Bật / Tắt / Xem auto NV Bò Mộng (farm + trả NV)")
+    print("-" * 65)
     print("  [QUẢN LÝ & SĂN BOSS THỦ CÔNG]")
     print("  boss                        : Xem danh sách Boss đang còn sống (map, khu, thời gian)")
     print("  boss all / history          : Xem toàn bộ lịch sử các Boss (kể cả đã bị hạ gục)")
@@ -336,6 +340,32 @@ def print_hunt_status(client: ClientNRO):
     print(f"- Tiến độ dò khu:        Khu {st['current_scan_zone']} (Đã quét {len(st['scanned_zones'])} khu)")
     print("=" * 65 + "\n")
 
+
+
+def print_quest_status(client: ClientNRO):
+    """In bảng trạng thái Auto NV Bò Mộng."""
+    st = client.get_quest_status()
+    print("\n" + "=" * 65)
+    print("        BẢNG TRẠNG THÁI AUTO NHIỆM VỤ BÒ MỘNG (NVBM)        ")
+    print("=" * 65)
+    print(f"- Hoạt động:             {'ĐANG BẬT [ON]' if st['is_running'] else 'ĐÃ TẮT [OFF]'}")
+    print(f"- Giai đoạn (state):     {st['state']}")
+    print(f"- Nhiệm vụ hiện tại:     {st['quest']}")
+    print(f"- Đã trả NV:             {st['quests_completed']} NV")
+    print(f"- Tổng quái đã diệt:     {st['total_kills']} con")
+    print(f"- Thời gian chạy:        {st['time_str']}")
+    if st.get("quests_total"):
+        print(f"- NV còn lại hôm nay:    {st['quests_remaining']}/{st['quests_total']}")
+    try:
+        xc = client.xmap_controller
+        print(f"- Capsule ĐB (csdb):        {'BẬT' if xc.is_use_capsule_vip else 'TẮT'} "
+              f"(có item 194: {'có' if xc.has_item_capsule_vip() else 'không'})")
+        print(f"- Capsule Thường (cs):      {'BẬT' if xc.is_use_capsule_normal else 'TẮT'}")
+        if xc.capsule_broken:
+            print("- Chú ý: Capsule đang bị TỰ TẮT do kẹt (sẽ đi bộ). Gõ lại xmap/nvbm để thử lại.")
+    except Exception:
+        pass
+    print("=" * 65 + "\n")
 
 
 def print_boss_list(client: ClientNRO, show_all: bool = False):
@@ -510,6 +540,33 @@ def interactive_cli(client: ClientNRO):
                     if not client.boss_hunter.is_enabled:
                         client.start_auto_hunt()
                     print(f"[*] Đã thêm '{boss_name}' vào Whitelist và kích hoạt Auto Săn Boss!")
+
+        elif cmd in ("captest", "capsule", "testcap"):
+            ctrl = client.controller
+            print(f"[*] Panel capsule TRƯỚC test: {len(ctrl.capsule_map_names)} mục")
+            print("[*] Bật sniff gói tin 8s + gửi useItem capsule ĐB (194)...")
+            ctrl.debug = True
+            client.service.useItem(0, 1, -1, 194)
+            time.sleep(8.0)
+            ctrl.debug = False
+            names = list(ctrl.capsule_map_names)
+            print(f"[*] Panel capsule SAU test: {len(names)} mục")
+            for i, nm in enumerate(names[:40]):
+                print(f"    [{i}] {nm}")
+
+        elif cmd in ("nvbm", "nhiemvu", "quest", "bomong"):
+            # Quét mọi token để chịu được nhập dính chữ khi console bị log nền xen vào
+            subs = [a.lower().strip(".,;:!?") for a in args]
+            if not subs or any(x in ("status", "st", "info") for x in subs):
+                print_quest_status(client)
+            elif any(x in ("off", "stop", "0", "false") for x in subs):
+                client.stop_auto_quest()
+                print("[*] Auto NV Bò Mộng: TẮT!")
+            elif any(x in ("on", "start", "1", "true") for x in subs):
+                client.start_auto_quest()
+                print("[*] Auto NV Bò Mộng: BẬT!")
+            else:
+                print(f"Không rõ tham số '{args[0]}'. Cú pháp: nvbm [on|off|status]")
 
         # ----------------------------------------------------------------------
         # CÁC LỆNH CHIẾN ĐẤU & TÀN SÁT (FOCUS, TELE, AK, TÀN SÁT)

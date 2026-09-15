@@ -59,6 +59,10 @@ class Controller(IMessageHandler):
         self.capsule_map_names: List[str] = []
         self.capsule_planet_names: List[str] = []
         self.on_capsule_maps_callbacks: List[Callable[[List[str], List[str]], None]] = []
+        # Callback menu NPC (cmd 32: npc_template_id, chat_text, menu_options)
+        self.on_npc_menu_callbacks: List[Callable[[int, str, List[str]], None]] = []
+        # Callback quái bị hạ (mob_template_id)
+        self.on_mob_killed_callbacks: List[Callable[[int], None]] = []
 
     @classmethod
     def gI(cls) -> "Controller":
@@ -312,7 +316,20 @@ class Controller(IMessageHandler):
                     n_bag = msg.reader().readUnsignedByte()
                     char.arrItemBag.clear()
                     for idx in range(n_bag):
-                        it = self.read_item(msg.reader())
+                        try:
+                            if msg.reader().available() <= 0:
+                                break
+                            it = self.read_item(msg.reader())
+                        except Exception as ex:
+                            # Một số server gửi capacity (vd 80) nhưng chỉ liệt kê
+                            # slot đã dùng (vd 37) rồi hết buffer -> dừng êm.
+                            try:
+                                rest = msg.reader().available()
+                            except Exception:
+                                rest = -1
+                            if rest != 0:
+                                print(f"[Controller] -36 bọc balo lỗi ở slot {idx}/{n_bag}: {ex} (còn {rest} bytes). Giữ {len(char.arrItemBag)} món đã đọc.")
+                            break
                         if it is not None:
                             it.index_ui = idx
                             char.arrItemBag.append(it)
@@ -329,6 +346,13 @@ class Controller(IMessageHandler):
                             break
                     for cb in self.on_bag_update_callbacks:
                         cb(char.arrItemBag)
+                else:
+                    # Biến thể -36 chưa biết: log để bổ sung cấu trúc
+                    try:
+                        rest = msg.reader().available()
+                    except Exception:
+                        rest = -1
+                    print(f"[Controller] -36 sub={b38} chưa hỗ trợ (còn {rest} bytes). Bỏ qua.")
                 return
 
             # ------------------------------------------------------------------
@@ -516,12 +540,20 @@ class Controller(IMessageHandler):
 
                 # NPCs
                 num_npc = msg.reader().readByte()
+                char.mapInfo.npcs.clear()
                 for _ in range(num_npc):
                     st = msg.reader().readByte()
                     nx = msg.reader().readShort()
                     ny = msg.reader().readShort()
                     nt = msg.reader().readByte()
                     nav = msg.reader().readShort()
+                    char.mapInfo.npcs.append({
+                        "status": st,
+                        "x": nx,
+                        "y": ny,
+                        "template_id": nt,
+                        "avatar": nav,
+                    })
                     if nt == 4:
                         char.magicTree.x = nx
                         char.magicTree.y = ny
@@ -665,8 +697,16 @@ class Controller(IMessageHandler):
                 mob_idx = msg.reader().readUnsignedByte()
                 char = Char.myCharz()
                 if mob_idx in char.mapInfo.mobs:
-                    char.mapInfo.mobs[mob_idx].hp = 0
-                    char.mapInfo.mobs[mob_idx].status = 0
+                    mob = char.mapInfo.mobs[mob_idx]
+                    template_id = getattr(mob, "templateId", -1)
+                    mob.hp = 0
+                    mob.status = 0
+                    for cb in self.on_mob_killed_callbacks:
+                        try:
+                            cb(template_id)
+                        except Exception as ex:
+                            if self.debug:
+                                print(f"[Controller] on_mob_killed callback error: {ex}")
                 return
 
             if cmd == -13:
@@ -679,6 +719,34 @@ class Controller(IMessageHandler):
                     m.hp = msg.reader().readInt()
                     m.maxHp = m.hp
                     m.status = 5
+                return
+
+            # ------------------------------------------------------------------
+            # 18b. MENU NPC / CHAT POPUP (cmd 32: Bò Mộng, nhiệm vụ...)
+            # ------------------------------------------------------------------
+            if cmd == 32:
+                try:
+                    npc_template_id = msg.reader().readShort()
+                    chat_text = msg.reader().readUTF()
+                    n_opts = msg.reader().readByte()
+                    options = []
+                    for _ in range(n_opts):
+                        options.append(msg.reader().readUTF())
+                    try:
+                        avatar = msg.reader().readShort()
+                    except Exception:
+                        avatar = -1
+                    if self.debug:
+                        print(f"[Controller] NPC menu {npc_template_id}: {chat_text[:120]}... opts={options}")
+                    for cb in self.on_npc_menu_callbacks:
+                        try:
+                            cb(npc_template_id, chat_text, options)
+                        except Exception as ex:
+                            if self.debug:
+                                print(f"[Controller] on_npc_menu callback error: {ex}")
+                except Exception as ex:
+                    if self.debug:
+                        print(f"[Controller] parse NPC menu error: {ex}")
                 return
 
             # ------------------------------------------------------------------
@@ -714,7 +782,18 @@ class Controller(IMessageHandler):
                 char.expForOneAdd = msg.reader().readShort()
                 char.cDefGoc = msg.reader().readShort()
                 char.cCriticalGoc = msg.reader().readByte()
-                print(f"[Controller] My Info loaded: HP={char.cHP:,}/{char.cHPFull:,}, MP={char.cMP:,}/{char.cMPFull:,}, Dam={char.cDamFull:,}")
+                try:
+                    last = getattr(self, "_last_myinfo_log", None)
+                    hp_pct = (char.cHP / char.cHPFull) if char.cHPFull else 1.0
+                    mp_pct = (char.cMP / char.cMPFull) if char.cMPFull else 1.0
+                    import time as _t
+                    now = _t.time()
+                    if (last is None or abs(hp_pct - last[0]) >= 0.05 or abs(mp_pct - last[1]) >= 0.05
+                            or now - last[2] >= 30.0):
+                        self._last_myinfo_log = (hp_pct, mp_pct, now)
+                        print(f"[Controller] My Info loaded: HP={char.cHP:,}/{char.cHPFull:,}, MP={char.cMP:,}/{char.cMPFull:,}, Dam={char.cDamFull:,}")
+                except Exception:
+                    pass
                 return
 
             # ------------------------------------------------------------------
@@ -885,6 +964,70 @@ class Controller(IMessageHandler):
             elif sub == 5:
                 char = Char.myCharz()
                 char.cHP = msg.readInt3Byte()
+
+            elif sub == 6:
+                # ME_LOAD_MP: cập nhật KI bản thân
+                char = Char.myCharz()
+                char.cMP = msg.readInt3Byte()
+
+            elif sub == 13:
+                # Cập nhật HP người chơi (bản thân hoặc người khác)
+                cid = msg.reader().readInt()
+                char = Char.myCharz()
+                target = char if cid == char.charID else char.mapInfo.chars.get(cid)
+                if target is not None:
+                    target.cHP = msg.readInt3Byte()
+                    target.cHPFull = msg.readInt3Byte()
+                    msg.reader().readShort()  # eff5BuffHp
+                    msg.reader().readShort()  # eff5BuffMp
+                return
+
+            elif sub == 14:
+                # HP người chơi khác + hiệu ứng trúng đòn
+                cid = msg.reader().readInt()
+                char = Char.myCharz()
+                target = char.mapInfo.chars.get(cid)
+                if target is not None:
+                    target.cHP = msg.readInt3Byte()
+                    msg.reader().readByte()  # injure type
+                    try:
+                        target.cHPFull = msg.readInt3Byte()
+                    except Exception:
+                        pass
+                return
+
+            elif sub == 15:
+                # Người chơi khác hồi sinh
+                cid = msg.reader().readInt()
+                char = Char.myCharz()
+                target = char.mapInfo.chars.get(cid)
+                if target is not None:
+                    target.cHP = msg.readInt3Byte()
+                    target.cHPFull = msg.readInt3Byte()
+                    target.cx = msg.reader().readShort()
+                    target.cy = msg.reader().readShort()
+                    target.statusMe = 1
+                return
+
+            elif sub == 23:
+                # Học skill mới -> thêm vào danh sách skill
+                char = Char.myCharz()
+                sk_id = msg.reader().readShort()
+                if sk_id not in char.skills:
+                    char.skills.append(sk_id)
+                    print(f"[Controller] Học skill mới: skillId={sk_id} (tổng {len(char.skills)} skill)")
+                return
+
+            elif sub == 35:
+                # Cập nhật trạng thái PK
+                cid = msg.reader().readInt()
+                char = Char.myCharz()
+                pk_type = msg.reader().readByte()
+                if cid == char.charID:
+                    char.cTypePk = pk_type
+                elif cid in char.mapInfo.chars:
+                    char.mapInfo.chars[cid].cTypePk = pk_type
+                return
         except Exception as ex:
             if self.debug:
                 print(f"[Controller] messageSubCommand error: {ex}")

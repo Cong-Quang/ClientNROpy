@@ -4,10 +4,11 @@ Bộ thực thi các bước chuyển map trong Xmap,
 mô phỏng Pk9rXmap.cs và Utils.ChangeMap trong Dragonboy C#.
 """
 
+import math
 import time
 from typing import Optional, TYPE_CHECKING
 from .xmap_objects import MapNext, TypeMapNext
-from .map_data import get_map_name, normalize_str
+from .map_data import get_map_name, normalize_str, resolve_map_id
 
 if TYPE_CHECKING:
     from ..client import ClientNRO
@@ -41,10 +42,40 @@ class XmapExecutor:
             if target_norm in wp_norm or wp_norm in target_norm:
                 return wp
 
-        # 3. Nếu map chỉ có đúng 1 hoặc 2 cổng, có thể fallback nếu cần
+        # 3. So khớp rút gọn: bỏ tiền tố địa danh chung ở cả 2 phía
+        # (vd cổng "Tháp Karin" ~ map "Chân tháp Karin")
+        prefixes = ("chan ", "cong ", "loi ", "loi vao ", "duong toi ", "di ",
+                    "tram ", "lang ", "thanh pho ", "dao ", "vach nui ", "vach ",
+                    "thung lung ", "doi ", "rung ", "nui ", "hang ", "vuc ")
+
+        def _strip(text: str) -> str:
+            t = text
+            for pre in prefixes:
+                if t.startswith(pre):
+                    t = t[len(pre):]
+                    break
+            return t
+
+        stripped_target = _strip(target_norm)
+        stripped_matches = []
+        for wp in map_info.waypoints:
+            wp_norm = normalize_str(wp.name)
+            if _strip(wp_norm) == stripped_target and stripped_target:
+                stripped_matches.append(wp)
+        if len(stripped_matches) == 1:
+            return stripped_matches[0]
+
+        # 4. Nếu map chỉ có đúng 1 cổng, fallback
         if len(map_info.waypoints) == 1:
             return map_info.waypoints[0]
 
+        # 5. Trượt: liệt kê cổng hiện có để chẩn đoán (tên cổng khác tên map?)
+        try:
+            names = [w.name for w in map_info.waypoints]
+            print(f"[Xmap] Không tìm thấy cổng tới '{target_name}' (ID {target_map_id}). "
+                  f"Cổng hiện có: {names}")
+        except Exception:
+            pass
         return None
 
     @staticmethod
@@ -77,8 +108,11 @@ class XmapExecutor:
             elif wp.minX > 1500:  # Gần biên phải
                 cx = wp.minX + 15
 
-            # Gửi gói tin di chuyển nhân vật tới tâm cổng
-            client.service.charMove(cx, cy)
+            # Đứng sát cổng (tele kiểu combat + chờ đồng bộ) rồi mới xin qua map
+            try:
+                client.teleport(cx, cy)
+            except Exception:
+                client.service.charMove(cx, cy)
             time.sleep(0.1)
 
             # Gửi yêu cầu qua map
@@ -93,6 +127,9 @@ class XmapExecutor:
             if not map_next.info:
                 return False
             npc_id = map_next.info[0]
+            # Cơ chế game: phải đứng gần NPC mới mở được menu
+            if not XmapExecutor.teleport_near_npc(client, npc_id):
+                return False
             # Mở menu NPC
             client.service.openMenu(npc_id)
             time.sleep(0.15)
@@ -109,6 +146,9 @@ class XmapExecutor:
             npc_id = map_next.info[0]
             select_menu = map_next.info[1]
             select_panel = map_next.info[2]
+            # Cơ chế game: phải đứng gần NPC mới mở được menu
+            if not XmapExecutor.teleport_near_npc(client, npc_id):
+                return False
             client.service.openMenu(npc_id)
             time.sleep(0.15)
             client.service.confirmMenu(npc_id, select_menu)
@@ -132,13 +172,76 @@ class XmapExecutor:
         elif next_type == TypeMapNext.Capsule:
             if not map_next.info:
                 return False
-            select_panel = map_next.info[0]
+            planned_select = map_next.info[0]
             capsule_item_id = map_next.info[1] if len(map_next.info) > 1 else 194
-            # Mở panel Capsule tương ứng
+            controller = getattr(client, "controller", None)
+            before = list(getattr(controller, "capsule_map_names", []) or []) if controller else []
+            # Mở panel Capsule (server trả danh sách map thật qua cmd -91)
             client.service.useItem(0, 1, -1, capsule_item_id)
-            time.sleep(0.2)
+            # Chờ panel thật từ server (tối đa ~2.5s); bản C# đọc index từ
+            # panel này nên không được dùng index kế hoạch nếu thứ tự khác.
+            fresh = []
+            for _ in range(25):
+                time.sleep(0.1)
+                cur = list(getattr(controller, "capsule_map_names", []) or []) if controller else []
+                if cur and cur != before:
+                    fresh = cur
+                    break
+                fresh = cur
+            select_panel = planned_select
+            if fresh:
+                try:
+                    cgender = client.myChar.cgender
+                except Exception:
+                    cgender = 0
+                for idx, name in enumerate(fresh):
+                    try:
+                        if resolve_map_id(name, cgender=cgender) == map_next.to:
+                            select_panel = idx
+                            break
+                    except Exception:
+                        continue
             # Chọn map đích từ panel (cmd -91)
+            try:
+                print(f"[Capsule] Chot select={select_panel} cho map {map_next.to} "
+                      f"(panel: {len(fresh)} muc, ke hoach: {planned_select})")
+            except Exception:
+                pass
             client.service.requestMapSelect(select_panel)
             return True
 
         return False
+
+    # Khoảng cách tối đa để mở menu NPC (server check ~60px)
+    NPC_INTERACT_DISTANCE = 55
+
+    @staticmethod
+    def teleport_near_npc(client: "ClientNRO", npc_template_id: int) -> bool:
+        """Tele tới sát NPC rồi mới cho mở menu (cơ chế game).
+
+        Trả về True khi đã đứng trong tầm (hoặc không rõ tọa độ NPC thì
+        vẫn cho thử kiểu cũ). False khi tele xong mà vẫn đứng xa -> Xmap
+        retry thay vì spam gói menu bị server lờ.
+        """
+        try:
+            my_char = client.myChar
+            map_info = my_char.mapInfo
+            find = getattr(map_info, "find_npc", None)
+            npc = find(npc_template_id) if callable(find) else None
+            if npc is None:
+                return True
+            dist = math.hypot(npc["x"] - my_char.cx, npc["y"] - my_char.cy)
+            if dist <= XmapExecutor.NPC_INTERACT_DISTANCE:
+                return True
+            ok = client.teleport(int(npc["x"]) - 10, int(npc["y"]))
+            time.sleep(0.5)
+            my_char = client.myChar
+            dist2 = math.hypot(npc["x"] - my_char.cx, npc["y"] - my_char.cy)
+            if dist2 <= XmapExecutor.NPC_INTERACT_DISTANCE:
+                return True
+            print(f"[Xmap] NPC {npc_template_id} vẫn xa ({dist2:.0f}px) sau tele "
+                  f"(gửi {'thành công' if ok else 'thất bại'}). Thử lại...")
+            return False
+        except Exception as ex:
+            print(f"[Xmap] Lỗi tele tới NPC {npc_template_id}: {ex}")
+            return True

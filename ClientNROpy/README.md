@@ -12,6 +12,7 @@
   - **Teleport**: Dịch chuyển tức thời toạ độ `(x, y)` hoặc dịch chuyển đến thực thể.
   - **AK (Auto Attack)**: Tự động đánh mục tiêu đang focus theo chu kỳ.
   - **Tàn Sát (Slaughter / Auto Mob / Auto PK)**: Tự động đánh toàn bộ quái hoặc lọc theo loại quái, né siêu quái, tàn sát người chơi, tự nhặt đồ rơi và tự ăn đậu thần khi HP/KI thấp.
+  - **Xoay skill theo hành tinh** (`TANSAT_SKILLS_BY_GENDER` + `_select_and_attack`): mỗi đòn tự `selectSkill` đúng bộ 3 chiêu của hành tinh thay vì kẹt 1 skill — Trái Đất `(9, 1, 0)`, Namek `(12, 3, 2)`, Xayda `(13, 5, 4)`.
 
 ### 2. Hệ thống Tự Động Săn Boss Hoàn Chỉnh (`BossHunter` FSM)
 - [`ClientNROpy/boss_hunter.py`](file:///c:/data/nro/ClientNROpy/boss_hunter.py): Bộ điều khiển máy trạng thái tự động hóa hoàn toàn quy trình săn Boss:
@@ -32,6 +33,24 @@
 ### 4. Hệ thống Tìm Đường Xmap (`Mod/Xmap/`)
 - [`ClientNROpy/xmap/`](file:///c:/data/nro/ClientNROpy/xmap): Thuật toán Dijkstra, dữ liệu liên kết 160 map, Capsule Đặc Biệt / Thường.
 
+### 5. Hệ thống Auto Nhiệm Vụ Bò Mộng Hằng Ngày (`AutoQuest` FSM)
+- [`ClientNROpy/auto_quest_bomong.py`](file:///c:/data/nro/ClientNROpy/auto_quest_bomong.py): Máy trạng thái `IDLE → GET_QUEST → NAVIGATE_TO_MAP → SELECT_ZONE → EXECUTE_QUEST → REPORT_QUEST`:
+  - **Nhận NV Siêu khó** tại Bò Mộng (map 47, NPC template 17): menu `[1, 4]`.
+  - **Parse menu NPC** (cmd 32): tên quái, map, tiến độ `x/y`, số NV còn lại trong ngày; tự dừng khi hết NV.
+  - **Xmap tới map NV** (bảng `MOB_LOCATION_DATA`), kiểm tra điều kiện vào map, tự huỷ/nhận NV mới nếu map không vào được.
+  - **Chọn khu** còn trống qua `openUIZone` / `requestChangeZone`.
+  - **Farm** bằng tàn sát lọc theo loại quái của NV, đếm kill qua callback hạ quái (cmd -12).
+  - **Trả NV** `[1, 0]`; server báo chưa đủ thì farm tiếp, trả xong nhận NV mới.
+- Hạ tầng đi kèm: `Controller` parse menu NPC (cmd 32) + callback `on_npc_menu` / `on_mob_killed`, `MapInfo.npcs` lưu tọa độ NPC (`find_npc`).
+- **Chống chết ảo**: hàm `is_char_dead()` + `_is_dead_confirmed()` (chỉ hồi sinh khi đọc liên tiếp vẫn chết).
+- **Giao tiếp NPC**: tele sát NPC (trong 60px, đứng lệch -10px) rồi mới `openMenu`; còn xa thì không mở menu.
+- **Capsule Xmap**: `useItem` mở panel rồi chờ danh sách map thật từ server (cmd -91) mới `requestMapSelect` đúng index (fix kẹt khi index kế hoạch lệch panel server).
+- **CLI**: lệnh `nvbm` quét mọi token nên không lỗi khi console bị log nền xen vào; log retry Xmap throttle 8s.
+- **Chẩn đoán Capsule**: lệnh `captest` xài capsule ĐB (194), sniff gói tin 8s và in panel map server trả về.
+- **Fallback đi bộ**: bước Capsule kẹt 3 lần liên tiếp thì Xmap tự tắt Capsule (`capsule_broken`) và lập lộ trình đi bộ tiếp; `xmap csvip`/`xmap cs` để tắt tay.
+- **Menu NPC**: bước `NpcMenu`/`NpcPanel` tele sát NPC (trong 55px) rồi mới `openMenu`, đúng cơ chế game; còn xa thì retry thay vì spam gói bị server lờ.
+- **Cổng Waypoint**: qua cổng bằng tele kiểu combat + chờ 0.5s rồi mới `requestChangeMap`; so khớp tên cổng rút gọn (bỏ tiền tố địa danh, vd cổng `Tháp Karin` ~ map `Chân tháp Karin`); trượt khớp thì in danh sách cổng hiện có để chẩn đoán.
+
 ---
 
 ## 🎯 Chi Tiết Tính Năng Chiến Đấu & Tàn Sát
@@ -41,7 +60,7 @@
 | **Focus** | `focus [mob\|char\|item\|clear]` | Nhắm tiêu điểm vào quái vật, người chơi, hoặc vật phẩm rơi dưới đất. |
 | **Teleport** | `tele [x y\|mob\|char\|item\|wp]` | Dịch chuyển tức thời không cần đồ họa chuẩn mod NRO (bước đệm gửi `charMove`). |
 | **AK (Auto Attack)** | `ak [on\|off]` | Tự động đánh liên tục mục tiêu đang nhắm (focus) sau mỗi ~150ms. |
-| **Tàn Sát Quái** | `ts` hoặc `ts mob` | Quét và tự động dịch chuyển áp sát tiêu diệt toàn bộ quái trong bản đồ. |
+| **Tàn Sát Quái** | `ts` hoặc `ts mob` | Quét và tự động dịch chuyển áp sát tiêu diệt toàn bộ quái trong bản đồ (tự xoay skill theo hành tinh). |
 | **Lọc Loại Quái** | `ts type <template_id>` | Chỉ tàn sát 1 loại quái nhất định (tương ứng `addtm` trong mod C#). |
 | **Lọc Quái Cụ Thể** | `ts id <mob_id>` | Chỉ tàn sát quái có ID chỉ định (tương ứng `addm` trong mod C#). |
 | **Tàn Sát Người (PK)** | `ts player` hoặc `ts pk` | Tự động quét người chơi khác trong map, tele áp sát và gửi gói tin tấn công. |
@@ -50,6 +69,18 @@
 | **Chỉ Nhặt Ngọc** | `cnn` | Cài đặt nhanh chỉ nhặt ngọc xanh / ngọc khoá (ID 77, 861). |
 | **Tự Ăn Đậu** | `abf [ngưỡng %]` | Tự động thu hoạch và dùng đậu thần khi HP hoặc KI thấp hơn ngưỡng (mặc định 20%). |
 | **Xem Cấu Hình** | `combat` | In toàn bộ bảng trạng thái cấu hình chiến đấu và tàn sát hiện tại. |
+
+---
+
+## 🐂 Auto Nhiệm Vụ Bò Mộng Hằng Ngày
+
+| Tính Năng | Lệnh CLI | Mô Tả |
+| :--- | :--- | :--- |
+| **Bật auto NV** | `nvbm on` | Nhận NV Siêu khó ở Bò Mộng rồi tự farm + trả NV liên tục. |
+| **Tắt auto NV** | `nvbm off` | Dừng auto NV (đồng thời tắt tàn sát và Xmap đang chạy). |
+| **Xem trạng thái** | `nvbm` hoặc `nvbm status` | Giai đoạn FSM, NV hiện tại, số NV đã trả, tổng quái đã diệt, thời gian chạy. |
+
+API tương ứng trong `ClientNRO`: `start_auto_quest()` / `stop_auto_quest()` / `toggle_auto_quest()` / `get_quest_status()`.
 
 ---
 
@@ -79,6 +110,11 @@ Tại dấu nhắc `nro> `, các lệnh hỗ trợ:
 - `cnn`: Chế độ chỉ nhặt ngọc.
 - `abf 30`: Bật tự động dùng đậu khi HP/KI dưới 30%.
 - `combat`: Xem bảng trạng thái cấu hình chiến đấu.
+
+### 🐂 Auto Nhiệm Vụ Bò Mộng:
+- `nvbm on`: Bật auto NV Bò Mộng (farm + trả NV liên tục).
+- `nvbm off`: Tắt auto NV Bò Mộng.
+- `nvbm status`: Xem giai đoạn, NV hiện tại, số NV đã trả, tổng kill.
 
 ### 🎯 Tự Động Săn Boss (Auto Hunt):
 - `hunt`: Bật / Tắt máy tự động săn Boss.
@@ -117,6 +153,13 @@ Tại dấu nhắc `nro> `, các lệnh hỗ trợ:
 
 ---
 
+## 📦 Gói Tin Đã Soát (Audit vs Controller.cs)
+
+Bổ sung các sub còn thiếu của `-30`: `6` (KI bản thân), `13` (HP bản thân/người khác — phát hiện chết), `14`/`15` (HP/hồi sinh người khác), `23` (học skill mới), `35` (trạng thái PK). Trước đó KI không bao giờ đồng bộ và HP bản thân thiếu 1 kênh cập nhật.
+
+Cứng hóa `-36` (balo): log chẩn đoán `sub` + số byte còn lại thay vì crash im lặng.
+Phát hiện qua log live: `-36` full-bag của server gửi capacity (80) nhưng chỉ liệt kê slot đã dùng (37) rồi hết buffer (bản C# cũng crash im lặng chỗ này) — đã sửa thành đọc tới hết buffer. Log `-42` throttle theo % HP/MP đổi để không flood console.
+
 ## ⚡ Kiểm Chứng Thực Tế Trên Server Game (Live Server Verified)
 
 Toàn bộ hệ thống đã được kiểm thử và xác nhận hoạt động thực tế trên server game:
@@ -124,4 +167,6 @@ Toàn bộ hệ thống đã được kiểm thử và xác nhận hoạt độn
 - Bóc tách thông báo Boss xuất hiện và bị hạ gục trực tiếp từ server (`Yanrobi`, `Tiểu đội trưởng Ginyu`, `Cooler Vàng`...).
 - Di chuyển Xmap đa map mượt mà.
 - Cơ chế đổi khu ngẫu nhiên `0.5s - 0.7s` và thích ứng cooldown server tự động.
+- Tàn sát xoay skill theo hành tinh (verify xoay `9→1→0`, `12→3→2`, `13→5→4` kèm `selectSkill`).
+- Auto NV Bò Mộng parse menu mẫu (`dơi da xanh → map 67/template 49`, đếm kill đúng loại).
 - Sẵn sàng để mở rộng và tinh chỉnh theo nhu cầu người dùng.

@@ -42,6 +42,12 @@ class XmapController:
 
         self.on_status_callbacks: List[Callable[[str], None]] = []
         self.on_finish_callbacks: List[Callable[[bool, str], None]] = []
+        self._last_fail_log: float = 0.0
+        self._last_step_log_key = None
+        self._last_step_log_time: float = 0.0
+        # Tự động bỏ Capsule khi bước Capsule kẹt liên tiếp (server không mở panel)
+        self.capsule_broken: bool = False
+        self._capsule_fail_count: int = 0
 
     def has_item_capsule_vip(self) -> bool:
         """Kiểm tra nhân vật có Capsule Đặc Biệt (ID 194) trong Balo hay không."""
@@ -149,6 +155,8 @@ class XmapController:
             self.way = None
             self.index_way = 0
             self.is_next_map_failed = False
+            self.capsule_broken = False
+            self._capsule_fail_count = 0
             self.is_acting = True
 
             self._log(f"Bắt đầu Xmap từ '{get_map_name(curr_map)}' (ID: {curr_map}) "
@@ -193,11 +201,12 @@ class XmapController:
                     self.xmap_data.load(cgender=cgender, task_id=task_id)
 
                     # Nạp liên kết bay nhanh từ Capsule nếu người chơi có Capsule trong Balo
+                    # (bỏ qua nếu capsule_broken: panel server không mở được)
                     capsule_id = None
-                    if self.can_use_capsule_vip():
+                    if not self.capsule_broken and self.can_use_capsule_vip():
                         capsule_id = 194
                         self._log("Sử dụng Capsule Đặc Biệt trong Balo để bay nhanh!")
-                    elif self.can_use_capsule_normal():
+                    elif not self.capsule_broken and self.can_use_capsule_normal():
                         capsule_id = 193
                         self._log("Sử dụng Capsule Thường trong Balo để bay nhanh!")
 
@@ -228,10 +237,16 @@ class XmapController:
 
                 # 3. Đang ở map bắt đầu của chặng hiện tại
                 if curr_map == self.way[self.index_way].map_start:
-                    # Kiểm tra nếu nhân vật bị chết thật sự
-                    is_dead = (self.client.myChar.cHPFull > 0 and self.client.myChar.cHP <= 0) or self.client.myChar.statusMe == 14
+                    # Kiểm tra nếu nhân vật bị chết thật sự (đọc 2 lần chống chết ảo)
+                    ch = self.client.myChar
+                    is_dead = (ch.cHPFull > 0 and ch.cHP <= 0) or ch.statusMe == 14
                     if is_dead:
-                        self._log("Nhân vật bị kiệt sức! Tự động hồi sinh về thành...")
+                        time.sleep(0.3)
+                        ch = self.client.myChar
+                        is_dead = (ch.cHPFull > 0 and ch.cHP <= 0) or ch.statusMe == 14
+                    if is_dead:
+                        self._log(f"Nhân vật bị kiệt sức (HP={ch.cHP}/{ch.cHPFull}, status={ch.statusMe})! "
+                                  f"Hồi sinh về thành [nguồn: Xmap]...")
                         self.client.service.returnTownFromDead()
                         self.way = None
                         time.sleep(2.0)
@@ -240,11 +255,18 @@ class XmapController:
                     # Thực thi bước chuyển map kế tiếp
                     step = self.way[self.index_way]
                     target_name = get_map_name(step.to)
-                    self._log(f"[{self.index_way + 1}/{len(self.way)}] Chuyển map sang: {target_name} (ID: {step.to}) [{step.type.name}]...")
+                    step_key = (self.map_end, self.index_way, step.to)
+                    if step_key != self._last_step_log_key or time.time() - self._last_step_log_time >= 20.0:
+                        self._last_step_log_key = step_key
+                        self._last_step_log_time = time.time()
+                        self._log(f"[{self.index_way + 1}/{len(self.way)}] Chuyển map sang: {target_name} (ID: {step.to}) [{step.type.name}]...")
 
                     success = XmapExecutor.execute_next_map(self.client, step)
                     if not success:
-                        self._log(f"Không thể thực hiện bước chuyển map sang ID {step.to}! Thử lại sau 1s...")
+                        # Throttle log lỗi (tối đa 1 dòng / 8s) để không flood console
+                        if time.time() - self._last_fail_log >= 8.0:
+                            self._last_fail_log = time.time()
+                            self._log(f"Không thể thực hiện bước chuyển map sang ID {step.to}! Đang thử lại...")
                         time.sleep(1.0)
                         continue
 
@@ -256,11 +278,22 @@ class XmapController:
                         if self.client.myChar.mapInfo.mapID != curr_map:
                             break
 
+                    # Bước Capsule mà map không đổi -> panel/server không hợp tác
+                    if self.client.myChar.mapInfo.mapID == curr_map and getattr(step.type, "name", step.type) in ("Capsule", 4):
+                        self._capsule_fail_count += 1
+                        self._log(f"Capsule không chuyển map ({self._capsule_fail_count}/3).")
+                        if self._capsule_fail_count >= 3:
+                            self.capsule_broken = True
+                            self._capsule_fail_count = 0
+                            self.way = None
+                            self.index_way = 0
+                            self._log("Tự động TẮT Capsule, lập lộ trình đi bộ thường...")
                     continue
 
                 # 4. Đã sang map đích của chặng hiện tại thành công
                 elif curr_map == self.way[self.index_way].to:
                     self.index_way += 1
+                    self._capsule_fail_count = 0
                     time.sleep(0.3)
                     continue
 

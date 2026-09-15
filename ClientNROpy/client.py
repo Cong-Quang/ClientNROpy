@@ -21,6 +21,7 @@ from .boss import Boss
 from .boss_manager import BossManager
 from .boss_hunter import BossHunter
 from .combat_manager import CombatManager
+from .auto_quest_bomong import AutoQuest
 from .xmap import XmapController, MapNext
 
 
@@ -56,6 +57,9 @@ class ClientNRO:
 
         # Bộ máy tự động săn Boss hoàn chỉnh (BossHunter FSM)
         self.boss_hunter: BossHunter = BossHunter(self)
+
+        # Auto nhiệm vụ Bò Mộng hằng ngày (AutoQuest FSM)
+        self.auto_quest: AutoQuest = AutoQuest(self)
 
 
 
@@ -376,5 +380,24 @@ class ClientNRO:
     def get_hunt_status(self) -> Dict[str, Any]:
         """Lấy toàn bộ trạng thái máy trạng thái săn Boss."""
         return self.boss_hunter.get_status()
+
+    # --------------------------------------------------------------------------
+    # AUTO NHIỆM VỤ BÒ MỘNG HẰNG NGÀY (AUTO QUEST)
+    # --------------------------------------------------------------------------
+    def start_auto_quest(self) -> None:
+        """Bắt đầu auto nhiệm vụ Bò Mộng."""
+        self.auto_quest.start()
+
+    def stop_auto_quest(self) -> None:
+        """Dừng auto nhiệm vụ Bò Mộng."""
+        self.auto_quest.stop()
+
+    def toggle_auto_quest(self) -> bool:
+        """Bật / Tắt auto nhiệm vụ Bò Mộng."""
+        return self.auto_quest.toggle()
+
+    def get_quest_status(self) -> Dict[str, Any]:
+        """Lấy trạng thái auto nhiệm vụ Bò Mộng."""
+        return self.auto_quest.get_status()
 
 

@@ -48,6 +48,7 @@ from .boss import Boss
 from .boss_manager import BossManager
 from .boss_hunter import BossHunter
 from .combat_manager import CombatManager
+from .auto_quest_bomong import AutoQuest, AutoState, QuestInfo
 
 # 4. Service, Controller và Client cấp cao
 from .service import Service
@@ -95,6 +96,9 @@ __all__ = [
     "BossManager",
     "BossHunter",
     "CombatManager",
+    "AutoQuest",
+    "AutoState",
+    "QuestInfo",
     "Service",
     "Controller",
     "ClientNRO",

@@ -509,10 +509,16 @@ class CombatManager:
         if my_char is None:
             return
 
-        # 1. Xử lý khi nhân vật chết thật sự (chỉ khi có cHPFull > 0 và cHP <= 0, hoặc statusMe == 14)
+        # 1. Xử lý khi nhân vật chết thật sự (đọc 2 lần chống chết ảo)
         is_dead = (my_char.cHPFull > 0 and my_char.cHP <= 0) or getattr(my_char, "statusMe", 1) == 14
         if is_dead:
+            time.sleep(0.3)
+            my_char = self._get_my_char()
+            is_dead = (my_char.cHPFull > 0 and my_char.cHP <= 0) or getattr(my_char, "statusMe", 1) == 14
+        if is_dead:
             if self.auto_revive:
+                print(f"[Combat] Hồi sinh về thành [nguồn: Tàn sát] "
+                      f"(HP={my_char.cHP}/{my_char.cHPFull}, status={getattr(my_char, 'statusMe', '?')})")
                 self.service.returnTownFromDead()
                 time.sleep(1.0)
             return
