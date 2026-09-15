@@ -1,0 +1,95 @@
+# -*- coding: utf-8 -*-
+"""
+Mô hình Char mô phỏng Char.cs trong C#.
+"""
+
+from typing import Optional, List
+from .pet import Pet
+from .magic_tree import MagicTree
+from .map_info import MapInfo
+from .item import Item
+
+
+class Char:
+    """
+    Thông tin toàn diện về nhân vật:
+    - Chỉ số: HP, MP, Sức mạnh, Tiềm năng, Vàng, Ngọc
+    - Hành trang balo (arrItemBag), Rương đồ (arrItemBox), Trang bị trên người (arrItemBody)
+    - Đệ tử (pet)
+    - Cây đậu thần (magicTree)
+    - Bản đồ hiện tại (mapInfo)
+    """
+
+    def __init__(self):
+        self.charID: int = 0
+        self.cName: str = ""
+        self.ctaskId: int = 0
+        self.cgender: int = 0
+        self.head: int = 0
+        self.body: int = 0
+        self.leg: int = 0
+        self.bag: int = 0
+        self.cPk: int = 0
+        self.cTypePk: int = 0
+        self.cPower: int = 0
+        self.cTiemNang: int = 0
+        self.nClass: int = 0
+        self.cHP: int = 0
+        self.cHPFull: int = 0
+        self.cMP: int = 0
+        self.cMPFull: int = 0
+        self.cDamFull: int = 0
+        self.cDefull: int = 0
+        self.cCriticalFull: int = 0
+        self.xu: int = 0
+        self.luong: int = 0
+        self.luongKhoa: int = 0
+        self.cx: int = 0
+        self.cy: int = 0
+        self.cdir: int = 1
+        self.statusMe: int = 1
+        self.canFly: bool = True
+        self.skills: List[int] = []
+
+        # Hành trang balo, trang bị và rương đồ
+        self.arrItemBody: List[Item] = []
+        self.arrItemBag: List[Item] = []
+        self.arrItemBox: List[Item] = []
+
+        # Đệ tử & Đậu thần
+        self.pet: Pet = Pet()
+        self.magicTree: MagicTree = MagicTree()
+
+        # Thông tin Map và Khu vực
+        self.mapInfo: MapInfo = MapInfo()
+
+        # Thông tin ngoại hình / trạng thái mở rộng
+        self.clevel: int = 0
+        self.cFlag: int = 0
+        self.isInvisiblez: bool = False
+        self.isMonkey: int = 0
+
+    _myCharz: Optional["Char"] = None
+
+    @classmethod
+    def myCharz(cls) -> "Char":
+        """Singleton đối tượng nhân vật chính tương tự Char.myCharz() trong C#."""
+        if cls._myCharz is None:
+            cls._myCharz = Char()
+        return cls._myCharz
+
+    @classmethod
+    def myPetz(cls) -> Pet:
+        """Singleton đối tượng đệ tử tương tự Char.myPetz() trong C#."""
+        return cls.myCharz().pet
+
+    @classmethod
+    def clearMyChar(cls) -> None:
+        """Reset đối tượng nhân vật khi đăng xuất tương tự GameCanvas.doResetToLoginScr()."""
+        cls._myCharz = None
+
+    def __repr__(self) -> str:
+        return (f"<Char ID={self.charID} Name='{self.cName}' "
+                f"HP={self.cHP:,}/{self.cHPFull:,} Power={self.cPower:,} "
+                f"Vàng={self.xu:,} Ngọc={self.luong:,} Balo={len(self.arrItemBag)} món, "
+                f"Rương={len(self.arrItemBox)} món>")
