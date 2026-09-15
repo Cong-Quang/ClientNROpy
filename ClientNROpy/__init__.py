@@ -50,6 +50,20 @@ from .service import Service
 from .controller import Controller
 from .client import ClientNRO
 
+# 5. Hệ thống tìm đường Xmap
+from .xmap import (
+    XmapController,
+    XmapData,
+    XmapAlgorithm,
+    XmapExecutor,
+    MapNext,
+    TypeMapNext,
+    GroupMap,
+    MAP_NAMES,
+    get_map_name,
+    resolve_map_id,
+)
+
 __all__ = [
     "myReader",
     "myWriter",
@@ -75,4 +89,14 @@ __all__ = [
     "Service",
     "Controller",
     "ClientNRO",
+    "XmapController",
+    "XmapData",
+    "XmapAlgorithm",
+    "XmapExecutor",
+    "MapNext",
+    "TypeMapNext",
+    "GroupMap",
+    "MAP_NAMES",
+    "get_map_name",
+    "resolve_map_id",
 ]

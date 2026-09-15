@@ -56,6 +56,9 @@ class Controller(IMessageHandler):
         self.on_chat_vip_callbacks: List[Callable[[ChatVip], None]] = []
         self.on_chat_world_callbacks: List[Callable[[str], None]] = []
         self.chat_vip_list: List[ChatVip] = []
+        self.capsule_map_names: List[str] = []
+        self.capsule_planet_names: List[str] = []
+        self.on_capsule_maps_callbacks: List[Callable[[List[str], List[str]], None]] = []
 
     @classmethod
     def gI(cls) -> "Controller":
@@ -246,6 +249,25 @@ class Controller(IMessageHandler):
                 for cb in self.on_server_message_callbacks:
                     try:
                         cb(f"{chat_t1} - {chat_t2}")
+                    except Exception:
+                        pass
+                return
+
+            # ------------------------------------------------------------------
+            # 4e. DANH SÁCH MAP CAPSULE / MAP TRANS (cmd -91)
+            # ------------------------------------------------------------------
+            if cmd == -91:
+                count = msg.reader().readByte()
+                self.capsule_map_names.clear()
+                self.capsule_planet_names.clear()
+                for _ in range(count):
+                    self.capsule_map_names.append(msg.reader().readUTF())
+                    self.capsule_planet_names.append(msg.reader().readUTF())
+                if self.debug:
+                    print(f"[Controller] Capsule map list ({count} maps): {self.capsule_map_names}")
+                for cb in self.on_capsule_maps_callbacks:
+                    try:
+                        cb(self.capsule_map_names, self.capsule_planet_names)
                     except Exception:
                         pass
                 return

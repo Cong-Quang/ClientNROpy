@@ -5,7 +5,7 @@ Lớp điều khiển cấp cao (ClientNRO).
 thành một API dễ sử dụng cho các tool và bot game headless.
 """
 
-from typing import Optional, List, Callable
+from typing import Optional, List, Callable, Union
 from .session import Session_ME
 from .controller import Controller
 from .service import Service
@@ -17,6 +17,7 @@ from .zone_info import ZoneInfo
 from .map_info import MapInfo
 from .player_data import PlayerData
 from .chat_vip import ChatVip
+from .xmap import XmapController, MapNext
 
 
 class ClientNRO:
@@ -39,6 +40,9 @@ class ClientNRO:
 
         # Tham chiếu trạng thái nhân vật
         self.myChar: Char = Char.myCharz()
+
+        # Bộ điều khiển tìm đường tự động Xmap
+        self.xmap_controller: XmapController = XmapController(self)
 
     def connect(self, host: Optional[str] = None, port: Optional[int] = None) -> None:
         """Kết nối tới server game."""
@@ -212,3 +216,34 @@ class ClientNRO:
     def get_chat_vip_history(self) -> List[ChatVip]:
         """Lấy danh sách lịch sử tin ChatVip và thông báo Boss đã nhận."""
         return self.controller.chat_vip_list
+
+    # --------------------------------------------------------------------------
+    # Các hàm điều khiển tính năng Xmap (Tự động tìm đường và chuyển map)
+    # --------------------------------------------------------------------------
+    def xmap(self, target: Union[int, str]) -> bool:
+        """
+        Bắt đầu Xmap tự động di chuyển tới map chỉ định.
+        target có thể là ID (vd: 0, 6, 7, 19, 45, 82, 100, 109)
+        hoặc tên map / alias (vd: 'nhà', 'home', 'đông karin', 'cold').
+        """
+        return self.xmap_controller.start(target)
+
+    def xmap_stop(self) -> None:
+        """Dừng tiến trình Xmap đang thực hiện."""
+        self.xmap_controller.stop()
+
+    def xmap_status(self) -> dict:
+        """Lấy thông tin trạng thái Xmap hiện tại."""
+        return self.xmap_controller.get_status()
+
+    def find_path(self, start_map: int, end_map: int) -> Optional[List[MapNext]]:
+        """Tra cứu lộ trình chuyển map ngắn nhất từ start_map đến end_map."""
+        return self.xmap_controller.find_path(start_map, end_map)
+
+    def on_xmap_status(self, callback: Callable[[str], None]) -> None:
+        """Lắng nghe thông điệp trạng thái từ Xmap."""
+        self.xmap_controller.on_status_callbacks.append(callback)
+
+    def on_xmap_finish(self, callback: Callable[[bool, str], None]) -> None:
+        """Lắng nghe sự kiện kết thúc Xmap (thành công hoặc thất bại)."""
+        self.xmap_controller.on_finish_callbacks.append(callback)

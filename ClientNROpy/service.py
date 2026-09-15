@@ -236,3 +236,60 @@ class Service:
             self.session.sendMessage(m)
         except Exception:
             pass
+
+    def openMenu(self, npcId: int) -> None:
+        """Mở menu tương tác NPC (cmd 33 trong C# Service.cs)."""
+        try:
+            m = Message(33)
+            m.writer().writeShort(npcId)
+            self.session.sendMessage(m)
+        except Exception as ex:
+            print(f"[Service] openMenu error: {ex}")
+
+    def confirmMenu(self, npcId: int, select: int) -> None:
+        """Chọn dòng tuỳ chọn trong menu NPC (cmd 32 trong C# Service.cs)."""
+        try:
+            m = Message(32)
+            m.writer().writeShort(npcId)
+            m.writer().writeByte(select)
+            self.session.sendMessage(m)
+        except Exception as ex:
+            print(f"[Service] confirmMenu error: {ex}")
+
+    def requestMapSelect(self, selected: int) -> None:
+        """Gửi yêu cầu chọn map từ panel danh sách map / capsule (cmd -91 trong C# Service.cs)."""
+        try:
+            m = Message(-91)
+            m.writer().writeByte(selected)
+            self.session.sendMessage(m)
+        except Exception as ex:
+            print(f"[Service] requestMapSelect error: {ex}")
+
+    def getMapOffline(self) -> None:
+        """Yêu cầu load map offline / chuyển map không đồng bộ (cmd -33 trong C# Service.cs)."""
+        try:
+            m = Message(-33)
+            self.session.sendMessage(m)
+        except Exception as ex:
+            print(f"[Service] getMapOffline error: {ex}")
+
+    def returnTownFromDead(self) -> None:
+        """Hồi sinh về làng / nhà khi nhân vật chết (cmd -15 trong C# Service.cs)."""
+        try:
+            m = Message(-15)
+            self.session.sendMessage(m)
+        except Exception as ex:
+            print(f"[Service] returnTownFromDead error: {ex}")
+
+    def useItem(self, item_type: int = 0, where: int = 1, index: int = -1, template: int = -1) -> None:
+        """Sử dụng vật phẩm trong hành trang (cmd -43 trong C# Service.cs)."""
+        try:
+            m = Message(-43)
+            m.writer().writeByte(item_type)
+            m.writer().writeByte(where)
+            m.writer().writeByte(index)
+            if index == -1:
+                m.writer().writeShort(template)
+            self.session.sendMessage(m)
+        except Exception as ex:
+            print(f"[Service] useItem error: {ex}")
