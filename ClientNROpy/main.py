@@ -276,7 +276,19 @@ def print_cli_help():
     print("  abf [ngưỡng %]              : Bật / Tắt tự động dùng đậu khi HP/KI thấp (vd: abf 20)")
     print("  combat                      : Xem bảng cấu hình chiến đấu và tàn sát hiện tại")
     print("-" * 65)
-    print("  [QUẢN LÝ & SĂN BOSS]")
+    print("  [AUTO SĂN BOSS HOÀN CHỈNH - AUTO HUNT]")
+    print("  hunt [on|off]               : Bật / Tắt Auto Săn Boss (Tự tìm, di chuyển, dò khu, đánh)")
+    print("  hunt status                 : Xem trạng thái, mục tiêu và tiến độ săn Boss")
+    print("  hunt delay <min> [max]      : Cài đặt thời gian ngẫu nhiên đổi khu (vd: hunt delay 0.5 0.7)")
+    print("  hunt add <tên>              : Thêm Boss vào danh sách săn (Whitelist)")
+    print("  hunt del <tên>              : Xóa Boss khỏi danh sách săn")
+    print("  hunt list                   : Xem danh sách Boss trong Whitelist")
+    print("  hunt all                    : Bật / Tắt săn tất cả Boss (không theo whitelist)")
+    print("  hunt loot                   : Bật / Tắt tự động nhặt đồ khi Boss chết")
+    print("  hunt revive                 : Bật / Tắt tự hồi sinh và quay lại map Boss")
+    print("  hunt clear                  : Xóa toàn bộ Whitelist (quay về săn tất cả)")
+    print("-" * 65)
+    print("  [QUẢN LÝ & SĂN BOSS THỦ CÔNG]")
     print("  boss                        : Xem danh sách Boss đang còn sống (map, khu, thời gian)")
     print("  boss all / history          : Xem toàn bộ lịch sử các Boss (kể cả đã bị hạ gục)")
     print("  boss go <stt|tên>           : Tự động Xmap bay đến map và tự đổi sang khu của Boss")
@@ -298,6 +310,30 @@ def print_cli_help():
     print("  info                        : In lại thông tin nhân vật")
     print("  help                        : Hiển thị bảng trợ giúp lệnh này")
     print("  exit / quit                 : Đăng xuất và thoát chương trình")
+    print("=" * 65 + "\n")
+
+
+def print_hunt_status(client: ClientNRO):
+    """In trực quan bảng trạng thái hệ thống Auto Săn Boss."""
+    st = client.get_hunt_status()
+    print("\n" + "=" * 65)
+    print("        BẢNG TRẠNG THÁI AUTO SĂN BOSS (AUTONOMOUS HUNTER)       ")
+    print("=" * 65)
+    print(f"- Hoạt động:             {'ĐANG BẬT [ON]' if st['is_enabled'] else 'ĐÃ TẮT [OFF]'}")
+    print(f"- Máy trạng thái (FSM):  {st['state']}")
+    print(f"- Tin nhắn trạng thái:   {st['status_message']}")
+    print(f"- Chế độ săn:            {'Săn TẤT CẢ các Boss' if st['hunt_all'] else 'Chỉ săn Boss theo Whitelist'}")
+    targets_str = ", ".join(st['target_bosses']) if st['target_bosses'] else "(Trống - Săn tất cả)"
+    print(f"- Danh sách Whitelist:   {targets_str}")
+    print(f"- Thời gian đổi khu:     {st.get('scan_zone_delay_str', '0.50s - 0.70s')}")
+    print(f"- Tự nhặt đồ khi xong:   {'BẬT' if st['auto_loot'] else 'TẮT'}")
+    print(f"- Tự hồi sinh quay lại:  {'BẬT' if st['auto_revive'] else 'TẮT'}")
+    if st['current_boss']:
+        b = st['current_boss']
+        z_str = f"Khu {b.get('zone_id')}" if b.get('zone_id', -1) >= 0 else "Chưa rõ khu"
+        print(f"- Boss đang theo dấu:    {b.get('name')} | Map: {b.get('map_name')} ({b.get('map_id')}) | {z_str}")
+        print(f"                         Xuất hiện lúc: {b.get('appear_time_str')} (Cách đây: {b.get('time_alive_str')})")
+    print(f"- Tiến độ dò khu:        Khu {st['current_scan_zone']} (Đã quét {len(st['scanned_zones'])} khu)")
     print("=" * 65 + "\n")
 
 
@@ -404,6 +440,76 @@ def interactive_cli(client: ClientNRO):
                 target = " ".join(args)
                 ok, msg = client.go_to_boss(target)
                 print(f"[*] {msg}")
+
+        elif cmd in ("hunt", "autohunt"):
+            if not args:
+                is_on = client.toggle_auto_hunt()
+                print(f"[*] Auto Săn Boss: {'BẬT' if is_on else 'TẮT'}!")
+            else:
+                sub = args[0].lower()
+                if sub in ("on", "start", "1", "true"):
+                    client.start_auto_hunt()
+                    print("[*] Auto Săn Boss: BẬT!")
+                elif sub in ("off", "stop", "0", "false"):
+                    client.stop_auto_hunt()
+                    print("[*] Auto Săn Boss: TẮT!")
+                elif sub in ("status", "st", "info"):
+                    print_hunt_status(client)
+                elif sub in ("delay", "wait", "speed", "tg"):
+                    if len(args) >= 3:
+                        try:
+                            min_d = float(args[1])
+                            max_d = float(args[2])
+                            client.boss_hunter.set_scan_delay(min_d, max_d)
+                            print(f"[*] Đã cập nhật thời gian ngẫu nhiên đổi khu: {min_d}s - {max_d}s!")
+                        except ValueError:
+                            print("Cú pháp: hunt delay <min_giây> <max_giây> (Ví dụ: hunt delay 0.5 0.7)")
+                    elif len(args) == 2:
+                        try:
+                            val = float(args[1])
+                            client.boss_hunter.set_scan_delay(val, val)
+                            print(f"[*] Đã cập nhật thời gian đổi khu cố định: {val}s!")
+                        except ValueError:
+                            print("Cú pháp: hunt delay <giây> (Ví dụ: hunt delay 0.5)")
+                    else:
+                        st = client.get_hunt_status()
+                        print(f"[*] Thời gian đổi khu hiện tại: {st.get('scan_zone_delay_str', '0.5s - 0.7s')}")
+                elif sub in ("add", "them", "+"):
+                    if len(args) > 1:
+                        boss_name = " ".join(args[1:])
+                        client.add_hunt_target(boss_name)
+                        print(f"[*] Đã thêm '{boss_name}' vào Whitelist săn Boss: {list(client.boss_hunter.target_bosses)}")
+                    else:
+                        print("Cú pháp: hunt add <tên boss> (Ví dụ: hunt add Broly)")
+                elif sub in ("del", "remove", "rm", "-"):
+                    if len(args) > 1:
+                        boss_name = " ".join(args[1:])
+                        client.remove_hunt_target(boss_name)
+                        print(f"[*] Đã xóa '{boss_name}' khỏi Whitelist săn Boss.")
+                    else:
+                        print("Cú pháp: hunt del <tên boss>")
+                elif sub in ("list", "ls"):
+                    targets = client.boss_hunter.get_targets()
+                    print(f"[*] Danh sách Boss trong Whitelist ({len(targets)}): {targets if targets else '(Trống - Săn tất cả)'}")
+                elif sub in ("clear", "reset"):
+                    client.clear_hunt_targets()
+                    print("[*] Đã xóa toàn bộ Whitelist (đang săn tất cả các Boss)!")
+                elif sub in ("all", "tatca"):
+                    client.boss_hunter.set_hunt_all(not client.boss_hunter.hunt_all)
+                    print(f"[*] Chế độ săn tất cả Boss (hunt_all): {'BẬT' if client.boss_hunter.hunt_all else 'TẮT (Chỉ săn whitelist)'}!")
+                elif sub in ("loot", "nhatdo"):
+                    client.boss_hunter.auto_loot = not client.boss_hunter.auto_loot
+                    print(f"[*] Tự động nhặt đồ khi Boss chết (auto_loot): {'BẬT' if client.boss_hunter.auto_loot else 'TẮT'}!")
+                elif sub in ("revive", "hoisinh"):
+                    client.boss_hunter.auto_revive = not client.boss_hunter.auto_revive
+                    print(f"[*] Tự hồi sinh và quay lại map Boss (auto_revive): {'BẬT' if client.boss_hunter.auto_revive else 'TẮT'}!")
+                else:
+                    # Nếu gõ: hunt Broly hoặc tên boss
+                    boss_name = " ".join(args)
+                    client.add_hunt_target(boss_name)
+                    if not client.boss_hunter.is_enabled:
+                        client.start_auto_hunt()
+                    print(f"[*] Đã thêm '{boss_name}' vào Whitelist và kích hoạt Auto Săn Boss!")
 
         # ----------------------------------------------------------------------
         # CÁC LỆNH CHIẾN ĐẤU & TÀN SÁT (FOCUS, TELE, AK, TÀN SÁT)

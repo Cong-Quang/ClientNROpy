@@ -12,22 +12,25 @@
   - **Teleport**: Dịch chuyển tức thời toạ độ `(x, y)` hoặc dịch chuyển đến thực thể.
   - **AK (Auto Attack)**: Tự động đánh mục tiêu đang focus theo chu kỳ.
   - **Tàn Sát (Slaughter / Auto Mob / Auto PK)**: Tự động đánh toàn bộ quái hoặc lọc theo loại quái, né siêu quái, tàn sát người chơi, tự nhặt đồ rơi và tự ăn đậu thần khi HP/KI thấp.
-- [`ClientNROpy/tests_combat.py`](file:///c:/data/nro/ClientNROpy/tests_combat.py): Bộ kiểm thử tự động toàn diện cho hệ thống chiến đấu và tàn sát (10 unit tests).
 
-### 2. Hệ thống Quản Lý & Săn Boss (`Mod/Boss.cs`)
+### 2. Hệ thống Tự Động Săn Boss Hoàn Chỉnh (`BossHunter` FSM)
+- [`ClientNROpy/boss_hunter.py`](file:///c:/data/nro/ClientNROpy/boss_hunter.py): Bộ điều khiển máy trạng thái tự động hóa hoàn toàn quy trình săn Boss:
+  - **Lắng nghe thông báo Boss**: Nhận tin nhắn server (cmd 93 - ChatVip).
+  - **Lọc theo Whitelist**: Cấu hình danh sách Boss muốn săn hoặc săn tất cả (`hunt_all`).
+  - **Kiểm tra trạng thái sống**: Bỏ qua nếu Boss đã bị người khác tiêu diệt trước hoặc trong khi di chuyển.
+  - **Tự động bay Xmap**: Tự động kích hoạt lộ trình Dijkstra tối ưu bay đến map Boss.
+  - **Dò khu vực tự động (Zone Scanner)**: Quét tuần tự các khu vực trong map để tìm Boss với delay ngẫu nhiên `0.5s - 0.7s`.
+  - **Áp sát & Chiến đấu**: Tự động teleport áp sát toạ độ Boss, khoá tiêu điểm, gửi lệnh đánh liên tục, duy trì đậu thần.
+  - **Tự hồi sinh quay lại đánh tiếp**: Bị Boss đánh chết tự động hồi sinh về thành và Xmap quay lại map/khu đánh tiếp.
+  - **Tự động nhặt đồ rơi**: Boss chết tự động teleport nhặt toàn bộ vật phẩm rơi trên đất trước khi đổi mục tiêu.
+
+### 3. Hệ thống Quản Lý & Bóc Tách Boss (`Mod/Boss.cs`)
 - [`ClientNROpy/boss.py`](file:///c:/data/nro/ClientNROpy/boss.py): Thực thể dữ liệu `Boss` lưu trữ tên, map, khu vực, thời gian sống (`Xh Ym Zs`), trạng thái sống/chết và người hạ gục.
 - [`ClientNROpy/boss_manager.py`](file:///c:/data/nro/ClientNROpy/boss_manager.py): Xử lý bóc tách thông báo ChatVip (cmd 93), quy tắc ánh xạ Map ID đặc biệt (Aru, Moori, Bojack, Ginyu Force), cập nhật thời gian thực khi vào cùng map, và tự động gọi Xmap bay tới Boss + đổi khu.
 - [`ClientNROpy/chat_vip.py`](file:///c:/data/nro/ClientNROpy/chat_vip.py): Đối tượng tin nhắn ChatVip (cmd 93), tách bạch sạch sẽ khỏi logic Boss.
-- [`ClientNROpy/tests_boss.py`](file:///c:/data/nro/ClientNROpy/tests_boss.py): Bộ kiểm thử độc lập cho tính năng Boss (8 unit tests).
 
-### 3. Hệ thống Tìm Đường Xmap (`Mod/Xmap/`)
-Toàn bộ mã nguồn nằm tại thư mục: [`ClientNROpy/xmap/`](file:///c:/data/nro/ClientNROpy/xmap)
-- [`xmap_controller.py`](file:///c:/data/nro/ClientNROpy/xmap/xmap_controller.py): Vòng đời điều khiển máy trạng thái di chuyển đa luồng.
-- [`xmap_data.py`](file:///c:/data/nro/ClientNROpy/xmap/xmap_data.py): Dữ liệu liên kết đồ thị (AutoWaypoint, tàu vũ trụ, NPC, Capsule Đặc Biệt/Thường).
-- [`xmap_algorithm.py`](file:///c:/data/nro/ClientNROpy/xmap/xmap_algorithm.py): Thuật toán Dijkstra tìm kiếm lộ trình ngắn nhất.
-- [`xmap_executor.py`](file:///c:/data/nro/ClientNROpy/xmap/xmap_executor.py): Thực thi di chuyển nhân vật và chuyển map.
-- [`map_data.py`](file:///c:/data/nro/ClientNROpy/xmap/map_data.py): Danh bạ 160 map và bộ phân giải alias (`nha`, `lang`, `cold`, `ttvt`...).
-- [`tests_xmap.py`](file:///c:/data/nro/ClientNROpy/tests_xmap.py): Bộ kiểm thử tự động Xmap (14 unit tests).
+### 4. Hệ thống Tìm Đường Xmap (`Mod/Xmap/`)
+- [`ClientNROpy/xmap/`](file:///c:/data/nro/ClientNROpy/xmap): Thuật toán Dijkstra, dữ liệu liên kết 160 map, Capsule Đặc Biệt / Thường.
 
 ---
 
@@ -77,7 +80,19 @@ Tại dấu nhắc `nro> `, các lệnh hỗ trợ:
 - `abf 30`: Bật tự động dùng đậu khi HP/KI dưới 30%.
 - `combat`: Xem bảng trạng thái cấu hình chiến đấu.
 
-### 👑 Quản Lý & Săn Boss:
+### 🎯 Tự Động Săn Boss (Auto Hunt):
+- `hunt`: Bật / Tắt máy tự động săn Boss.
+- `hunt status`: Xem bảng trạng thái chi tiết (mục tiêu, FSM, tiến độ dò khu).
+- `hunt delay <min> [max]`: Cài đặt thời gian ngẫu nhiên dừng ở mỗi khu để dò Boss (mặc định: `0.5s - 0.7s`).
+- `hunt add <tên>`: Thêm Boss vào danh sách săn (Whitelist) (Ví dụ: `hunt add Broly`, `hunt add Fide`).
+- `hunt del <tên>`: Xoá Boss khỏi Whitelist.
+- `hunt list`: Xem danh sách Whitelist.
+- `hunt all`: Chuyển đổi giữa chế độ Săn tất cả Boss hoặc Chỉ săn Whitelist.
+- `hunt loot`: Bật / Tắt tự động nhặt đồ sau khi Boss chết.
+- `hunt revive`: Bật / Tắt tự động hồi sinh và quay lại map Boss.
+- `hunt clear`: Xoá toàn bộ Whitelist.
+
+### 👑 Quản Lý & Săn Boss Thủ Công:
 - `boss`: Xem danh sách các Boss đang còn sống (STT, Tên, Map, Khu, Thời gian).
 - `boss all`: Xem toàn bộ lịch sử các Boss (kể cả đã bị tiêu diệt và người hạ).
 - `boss go <stt|tên>`: Tự động dùng Xmap bay đến map của Boss và tự chuyển sang đúng khu của Boss!
@@ -102,10 +117,11 @@ Tại dấu nhắc `nro> `, các lệnh hỗ trợ:
 
 ---
 
-## 🧪 Chạy Toàn Bộ Kiểm Thử Tự Động (Unit Tests)
+## ⚡ Kiểm Chứng Thực Tế Trên Server Game (Live Server Verified)
 
-Hệ thống có tổng cộng **42 unit tests** kiểm thử tự động toàn bộ tính năng:
-```powershell
-python -m unittest discover -s ClientNROpy -p "tests*.py"
-```
-Kết quả kiểm thử: **42/42 tests PASSED (OK)**.
+Toàn bộ hệ thống đã được kiểm thử và xác nhận hoạt động thực tế trên server game:
+- Đăng nhập, đồng bộ nhân vật, balo, đệ tử và cây đậu thần.
+- Bóc tách thông báo Boss xuất hiện và bị hạ gục trực tiếp từ server (`Yanrobi`, `Tiểu đội trưởng Ginyu`, `Cooler Vàng`...).
+- Di chuyển Xmap đa map mượt mà.
+- Cơ chế đổi khu ngẫu nhiên `0.5s - 0.7s` và thích ứng cooldown server tự động.
+- Sẵn sàng để mở rộng và tinh chỉnh theo nhu cầu người dùng.

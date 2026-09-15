@@ -19,6 +19,7 @@ from .player_data import PlayerData
 from .chat_vip import ChatVip
 from .boss import Boss
 from .boss_manager import BossManager
+from .boss_hunter import BossHunter
 from .combat_manager import CombatManager
 from .xmap import XmapController, MapNext
 
@@ -52,6 +53,9 @@ class ClientNRO:
 
         # Bộ điều khiển chiến đấu: Focus, Teleport, AK, Tàn Sát
         self.combat_manager: CombatManager = CombatManager(self)
+
+        # Bộ máy tự động săn Boss hoàn chỉnh (BossHunter FSM)
+        self.boss_hunter: BossHunter = BossHunter(self)
 
 
 
@@ -341,5 +345,36 @@ class ClientNRO:
     def combat_status(self) -> Dict[str, Any]:
         """Lấy toàn bộ trạng thái cấu hình chiến đấu hiện tại."""
         return self.combat_manager.get_status()
+
+    # --------------------------------------------------------------------------
+    # HỆ THỐNG AUTO SĂN BOSS HOÀN CHỈNH (AUTONOMOUS BOSS HUNTER)
+    # --------------------------------------------------------------------------
+    def start_auto_hunt(self, targets: Optional[List[str]] = None) -> None:
+        """Bắt đầu tính năng Auto Săn Boss hoàn chỉnh."""
+        self.boss_hunter.start(targets=targets)
+
+    def stop_auto_hunt(self) -> None:
+        """Dừng tính năng Auto Săn Boss."""
+        self.boss_hunter.stop()
+
+    def toggle_auto_hunt(self) -> bool:
+        """Bật / Tắt tính năng Auto Săn Boss."""
+        return self.boss_hunter.toggle()
+
+    def add_hunt_target(self, name: str) -> None:
+        """Thêm một Boss vào danh sách săn (whitelist)."""
+        self.boss_hunter.add_target(name)
+
+    def remove_hunt_target(self, name: str) -> None:
+        """Xóa một Boss khỏi danh sách săn."""
+        self.boss_hunter.remove_target(name)
+
+    def clear_hunt_targets(self) -> None:
+        """Xóa toàn bộ danh sách Boss mục tiêu (chuyển sang săn tất cả)."""
+        self.boss_hunter.clear_targets()
+
+    def get_hunt_status(self) -> Dict[str, Any]:
+        """Lấy toàn bộ trạng thái máy trạng thái săn Boss."""
+        return self.boss_hunter.get_status()
 
 

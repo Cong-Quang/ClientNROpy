@@ -15,6 +15,7 @@ Tự động hóa hoàn toàn quy trình săn Boss không cần đồ họa:
 """
 
 import time
+import random
 import threading
 from typing import Optional, List, Set, Dict, Any, Union
 
@@ -44,7 +45,8 @@ class BossHunter:
         self.target_bosses: Set[str] = set()          # Danh sách Boss muốn săn (chuỗi chuẩn hoá)
         self.auto_loot: bool = True                   # Tự động nhặt đồ sau khi Boss chết
         self.auto_revive: bool = True                 # Tự động hồi sinh và quay lại đánh tiếp
-        self.scan_zone_delay: float = 0.35            # Thời gian dừng ở mỗi khu để dò boss (giây)
+        self.min_scan_zone_delay: float = 0.5         # Thời gian dừng tối thiểu mỗi khu để dò boss (giây)
+        self.max_scan_zone_delay: float = 0.7         # Thời gian dừng tối đa mỗi khu để dò boss (giây)
         self.max_zones_scan: int = 30                 # Số khu tối đa sẽ dò trong 1 map
 
         # Trạng thái thực thi
@@ -122,12 +124,50 @@ class BossHunter:
         self.target_bosses.clear()
         self.hunt_all = True
 
+    def get_targets(self) -> List[str]:
+        """Lấy danh sách tên boss trong Whitelist."""
+        return list(self.target_bosses)
+
+    def set_hunt_all(self, val: bool) -> None:
+        """Đặt chế độ săn tất cả hay chỉ theo Whitelist."""
+        self.hunt_all = val
+
     def is_target_boss(self, boss: Boss) -> bool:
         """Kiểm tra Boss có thuộc đối tượng cần săn hay không."""
         if self.hunt_all or not self.target_bosses:
             return True
         norm_b = normalize_str(boss.name)
         return any(t in norm_b or norm_b in t for t in self.target_bosses)
+
+    @property
+    def scan_zone_delay(self) -> float:
+        """Thời gian chờ đổi khu trung bình (hỗ trợ tương thích ngược)."""
+        return (self.min_scan_zone_delay + self.max_scan_zone_delay) / 2.0
+
+    @scan_zone_delay.setter
+    def scan_zone_delay(self, val: float) -> None:
+        """Thiết lập thời gian chờ đổi khu cố định."""
+        self.min_scan_zone_delay = float(val)
+        self.max_scan_zone_delay = float(val)
+
+    def set_scan_delay(self, min_val: float, max_val: Optional[float] = None) -> None:
+        """Cấu hình khoảng thời gian ngẫu nhiên dừng ở mỗi khu để dò boss (giây)."""
+        self.min_scan_zone_delay = max(0.0, float(min_val))
+        if max_val is not None:
+            self.max_scan_zone_delay = max(self.min_scan_zone_delay, float(max_val))
+        else:
+            self.max_scan_zone_delay = self.min_scan_zone_delay
+
+    def get_scan_delay(self) -> float:
+        """Lấy thời gian chờ ngẫu nhiên giữa các lần đổi khu (mặc định 0.5 - 0.7 giây)."""
+        if self.min_scan_zone_delay >= self.max_scan_zone_delay:
+            return self.min_scan_zone_delay
+        return round(random.uniform(self.min_scan_zone_delay, self.max_scan_zone_delay), 3)
+
+    def tick(self) -> None:
+        """Thực hiện một chu kỳ máy trạng thái (dùng cho gọi thủ công hoặc test)."""
+        if self.is_enabled:
+            self._step()
 
     # --------------------------------------------------------------------------
     # VÒNG LẶP MÁY TRẠNG THÁI (STATE MACHINE LOOP)
@@ -210,6 +250,9 @@ class BossHunter:
             self.status_message = f"Phát hiện mục tiêu: '{next_boss.name}' tại '{next_boss.map_name}' [{next_boss.map_id}]. Bắt đầu di chuyển!"
             print(f"[*] {self.status_message}")
             self._change_state(self.STATE_MOVING)
+            my_char = self._get_my_char()
+            if my_char:
+                self._handle_moving(my_char)
         else:
             self.status_message = "Đang chờ Boss xuất hiện hoặc có Boss trong danh sách cấu hình..."
 
@@ -269,7 +312,9 @@ class BossHunter:
             self.status_message = f"Đang vào Khu {target_zone} theo thông báo Boss..."
             if self.client and hasattr(self.client, "change_zone"):
                 self.client.change_zone(target_zone)
-            time.sleep(self.scan_zone_delay)
+            delay = self.get_scan_delay()
+            if delay > 0:
+                time.sleep(delay)
             return
 
         # 3. Lấy danh sách khu vực trong map
@@ -295,7 +340,9 @@ class BossHunter:
         self.status_message = f"Đang dò Boss tại Khu {next_zone} (Đã kiểm tra {len(self.scanned_zones)} khu)..."
         if self.client and hasattr(self.client, "change_zone"):
             self.client.change_zone(next_zone)
-        time.sleep(self.scan_zone_delay)
+        delay = self.get_scan_delay()
+        if delay > 0:
+            time.sleep(delay)
 
     def _find_boss_in_current_map(self, my_char: Char) -> Optional[Char]:
         """Kiểm tra sự hiện diện của nhân vật Boss trong khu hiện tại."""
@@ -406,6 +453,7 @@ class BossHunter:
 
     def get_status(self) -> Dict[str, Any]:
         """Lấy toàn bộ trạng thái hoạt động của Auto Săn Boss."""
+        delay_str = f"{self.min_scan_zone_delay:.2f}s - {self.max_scan_zone_delay:.2f}s (Random)" if self.min_scan_zone_delay != self.max_scan_zone_delay else f"{self.min_scan_zone_delay:.2f}s"
         return {
             "is_enabled": self.is_enabled,
             "state": self.state,
@@ -416,5 +464,10 @@ class BossHunter:
             "target_bosses": list(self.target_bosses),
             "auto_loot": self.auto_loot,
             "auto_revive": self.auto_revive,
+            "min_scan_zone_delay": self.min_scan_zone_delay,
+            "max_scan_zone_delay": self.max_scan_zone_delay,
+            "scan_zone_delay_str": delay_str,
+            "current_scan_zone": self.current_scan_zone,
+            "scanned_zones": list(self.scanned_zones),
             "scanned_zones_count": len(self.scanned_zones),
         }

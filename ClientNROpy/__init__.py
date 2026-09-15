@@ -46,6 +46,7 @@ from .char import Char
 from .chat_vip import ChatVip
 from .boss import Boss
 from .boss_manager import BossManager
+from .boss_hunter import BossHunter
 from .combat_manager import CombatManager
 
 # 4. Service, Controller và Client cấp cao
@@ -92,6 +93,7 @@ __all__ = [
     "ChatVip",
     "Boss",
     "BossManager",
+    "BossHunter",
     "CombatManager",
     "Service",
     "Controller",
