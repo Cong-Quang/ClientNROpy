@@ -58,6 +58,13 @@ class CombatManager:
         self.pean_threshold: float = 0.2             # Ngưỡng HP/KI dùng đậu (20%)
         self.auto_revive: bool = True                # Tự động hồi sinh khi chết
 
+        # Skill tàn sát theo hành tinh (templateId): đấm, chưởng, đặc biệt
+        # Trái Đất (0): đấm 0, kamejoko 1, kaioken 9
+        # Namek (1): đấm 2, masenko 3, trứng 12
+        # Xayda (2): đấm 4, atomic 5, hoá hình 13
+        self._tansat_skill_idx: int = 0
+        self._skill_last_use: Dict[int, float] = {}
+
         # Quản lý luồng nền
         self._is_running: bool = False
         self._worker_thread: Optional[threading.Thread] = None
@@ -418,6 +425,84 @@ class CombatManager:
         self.target_mob_ids.clear()
         self.target_mob_types.clear()
 
+    # Bảng skill tàn sát theo hành tinh (ưu tiên: đặc biệt -> chưởng -> đấm)
+    TANSAT_SKILLS_BY_GENDER: Dict[int, tuple] = {
+        0: (9, 1, 0),    # Trái Đất: kaioken, kamejoko, đấm
+        1: (12, 3, 2),   # Namek: trứng, masenko, đấm
+        2: (13, 5, 4),   # Xayda: hoá hình, atomic, đấm
+    }
+
+    # Cooldown tối thiểu ước lượng cho từng skill đặc biệt (giây).
+    # ClientNROpy chưa parse cooldown thật từ server nên dùng giá trị an toàn
+    # để không spam skill đặc biệt khi đang hồi, fallback về đấm/chưởng.
+    TANSAT_SKILL_COOLDOWN: Dict[int, float] = {
+        0: 0.6, 1: 2.0, 9: 8.0,
+        2: 0.6, 3: 2.0, 12: 10.0,
+        4: 0.6, 5: 2.0, 13: 10.0,
+    }
+
+    def _get_tansat_skill_ids(self) -> tuple:
+        """Lấy danh sách templateId tàn sát tương ứng hành tinh (cgender)."""
+        my_char = self._get_my_char()
+        gender = getattr(my_char, "cgender", 0) if my_char else 0
+        try:
+            gender = int(gender)
+        except Exception:
+            gender = 0
+        return self.TANSAT_SKILLS_BY_GENDER.get(gender, (0, 2, 4))
+
+    def _pick_tansat_skill(self) -> Optional[int]:
+        """Chọn 1 skill templateId khả dụng, xoay vòng để dùng cả 3 skill.
+
+        - Ưu tiên skill đặc biệt/chưởng khi hết cooldown, fallback về đấm.
+        - Lọc theo char.skills nếu client đã đồng bộ (tránh chọn skill chưa học).
+        - Xoay vòng (_tansat_skill_idx) nên không bao giờ kẹt ở 1 skill.
+        """
+        my_char = self._get_my_char()
+        candidates = list(self._get_tansat_skill_ids())
+        if not candidates:
+            return None
+        owned = set(getattr(my_char, "skills", []) or []) if my_char else set()
+        # char.skills từ server là skillId; ở nhiều server nó trùng templateId
+        # với skill cấp 1 nên lọc mềm: nếu khớp được thì lọc, không thì giữ full.
+        filtered = [tid for tid in candidates if tid in owned]
+        pool = filtered if filtered else candidates
+        now = time.monotonic()
+        # Thử xoay vòng trong pool, ưu tiên skill hết cooldown
+        for offset in range(len(pool)):
+            idx = (self._tansat_skill_idx + offset) % len(pool)
+            tid = pool[idx]
+            cd = self.TANSAT_SKILL_COOLDOWN.get(tid, 1.0)
+            last = self._skill_last_use.get(tid, 0.0)
+            if now - last >= cd:
+                self._tansat_skill_idx = (idx + 1) % len(pool)
+                return tid
+        # Tất cả đang cooldown -> fallback về đấm (cuối pool) để không đứng yên
+        punch = pool[-1]
+        self._tansat_skill_idx = (self._tansat_skill_idx + 1) % len(pool)
+        return punch
+
+    def _select_and_attack(self, vMob: Optional[list] = None, vChar: Optional[list] = None) -> bool:
+        """selectSkill theo hành tinh rồi mới sendPlayerAttack (fix TS chỉ xài 1 skill)."""
+        my_char = self._get_my_char()
+        if my_char is None:
+            return False
+        skill_id = self._pick_tansat_skill()
+        if skill_id is not None:
+            try:
+                current = getattr(my_char, "skillTemplateId", None)
+                if current != skill_id:
+                    self.service.selectSkill(skill_id)
+                    my_char.skillTemplateId = skill_id
+                self._skill_last_use[skill_id] = time.monotonic()
+            except Exception:
+                pass
+        try:
+            self.service.sendPlayerAttack(vMob=(vMob or []), vChar=(vChar or []))
+            return True
+        except Exception:
+            return False
+
     def _step_tansat(self) -> None:
         """Vòng lặp tàn sát quái / người chơi, tự nhặt đồ và ăn đậu."""
         my_char = self._get_my_char()
@@ -483,8 +568,8 @@ class CombatManager:
                 my_char.focus_mob(target_mob)
                 # Dịch chuyển áp sát quái
                 self.teleport(target_mob.x, target_mob.y)
-                # Đánh quái
-                self.service.sendPlayerAttack(vMob=[target_mob], vChar=[])
+                # Đánh quái (tự chọn skill theo hành tinh: đấm/chưởng/đặc biệt)
+                self._select_and_attack(vMob=[target_mob], vChar=[])
                 return
 
         # 5. Tàn Sát Người Chơi (Mode 'player', 'char' hoặc 'all')
@@ -504,7 +589,7 @@ class CombatManager:
                 target_char = min(candidate_chars, key=lambda c: self._calc_distance(my_char.cx, my_char.cy, c.cx, c.cy))
                 my_char.focus_char(target_char)
                 self.teleport(target_char.cx, target_char.cy)
-                self.service.sendPlayerAttack(vMob=[], vChar=[target_char])
+                self._select_and_attack(vMob=[], vChar=[target_char])
                 return
 
     # --------------------------------------------------------------------------
