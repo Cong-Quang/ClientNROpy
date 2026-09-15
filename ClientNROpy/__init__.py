@@ -46,11 +46,13 @@ from .char import Char
 from .chat_vip import ChatVip
 from .boss import Boss
 from .boss_manager import BossManager
+from .combat_manager import CombatManager
 
 # 4. Service, Controller và Client cấp cao
 from .service import Service
 from .controller import Controller
 from .client import ClientNRO
+
 
 # 5. Hệ thống tìm đường Xmap
 from .xmap import (
@@ -90,6 +92,7 @@ __all__ = [
     "ChatVip",
     "Boss",
     "BossManager",
+    "CombatManager",
     "Service",
     "Controller",
     "ClientNRO",

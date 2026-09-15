@@ -259,29 +259,47 @@ def run_client(host="51.79.163.109", port=12457, username="poopooi02", password=
 
 
 def print_cli_help():
-    print("\n" + "=" * 60)
-    print("         HƯỚNG DẪN DÒNG LỆNH (CLI) - CLIENT NRO PY         ")
-    print("=" * 60)
-    print("  boss                   : Xem danh sách Boss đang còn sống (map, khu, thời gian)")
-    print("  boss all / history     : Xem toàn bộ lịch sử các Boss (kể cả đã bị hạ gục)")
-    print("  boss go <stt|tên>      : Tự động Xmap bay đến map và tự đổi sang khu của Boss")
-    print("                           Ví dụ: boss go 1, boss go Broly, boss go Fide")
-    print("  boss clear             : Xóa danh sách lịch sử Boss đã lưu")
-    print("  xmap <id|tên>          : Bắt đầu Xmap di chuyển tới map chỉ định")
-    print("                           Ví dụ: xmap 0, xmap 6, xmap 109, xmap nha, xmap cold")
-    print("  xmap stop / cancel     : Dừng tiến trình Xmap hiện tại")
-    print("  xmap status            : Xem trạng thái, tiến độ và cấu hình Capsule")
-    print("  xmap csvip             : Bật / Tắt sử dụng Capsule Đặc Biệt (bay nhanh)")
-    print("  xmap cs                : Bật / Tắt sử dụng Capsule Thường (bay nhanh)")
-    print("  xmap path <from> <to>  : Tra cứu lộ trình tối ưu giữa 2 map (vd: xmap path 0 109)")
-    print("  xmap list              : Xem danh sách các nhóm bản đồ")
-    print("  map                    : Xem thông tin bản đồ hiện tại, tọa độ và waypoints")
-    print("  zone [id]              : Xem danh sách khu hoặc đổi khu (vd: zone 5)")
-    print("  chat <nội dung>        : Chat trong bản đồ")
-    print("  info                   : In lại thông tin nhân vật")
-    print("  help                   : Hiển thị bảng trợ giúp lệnh này")
-    print("  exit / quit            : Đăng xuất và thoát chương trình")
-    print("=" * 60 + "\n")
+    print("\n" + "=" * 65)
+    print("           HƯỚNG DẪN DÒNG LỆNH (CLI) - CLIENT NRO PY           ")
+    print("=" * 65)
+    print("  [CHIẾN ĐẤU & TÀN SÁT - MOD C#]")
+    print("  focus [mob|char|item|clear] : Tiêu điểm nhắm mục tiêu (vd: focus mob, focus char Goku)")
+    print("  tele [x y|mob|char|item|wp] : Dịch chuyển tức thời tới toạ độ hoặc đối tượng")
+    print("  ak [on|off]                 : Tự động đánh mục tiêu đang focus (Auto Attack)")
+    print("  ts / tansat [on|off|mob|pk] : Bật/Tắt tàn sát quái hoặc người chơi (Auto PK)")
+    print("  ts type <id>                : Chỉ tàn sát 1 loại quái (theo template ID)")
+    print("  ts id <id>                  : Chỉ tàn sát 1 quái ID cụ thể")
+    print("  ts clear                    : Xoá bộ lọc quái (tàn sát tất cả quái trong map)")
+    print("  nsq                         : Bật / Tắt né siêu quái khi tàn sát")
+    print("  anhat                       : Bật / Tắt tự động nhặt vật phẩm rơi trên đất")
+    print("  cnn                         : Cài đặt nhanh chỉ nhặt ngọc")
+    print("  abf [ngưỡng %]              : Bật / Tắt tự động dùng đậu khi HP/KI thấp (vd: abf 20)")
+    print("  combat                      : Xem bảng cấu hình chiến đấu và tàn sát hiện tại")
+    print("-" * 65)
+    print("  [QUẢN LÝ & SĂN BOSS]")
+    print("  boss                        : Xem danh sách Boss đang còn sống (map, khu, thời gian)")
+    print("  boss all / history          : Xem toàn bộ lịch sử các Boss (kể cả đã bị hạ gục)")
+    print("  boss go <stt|tên>           : Tự động Xmap bay đến map và tự đổi sang khu của Boss")
+    print("  boss clear                  : Xóa danh sách lịch sử Boss đã lưu")
+    print("-" * 65)
+    print("  [TỰ ĐỘNG TÌM ĐƯỜNG XMAP]")
+    print("  xmap <id|tên>               : Bắt đầu Xmap di chuyển tới map chỉ định")
+    print("  xmap stop / cancel          : Dừng tiến trình Xmap hiện tại")
+    print("  xmap status                 : Xem trạng thái, tiến độ và cấu hình Capsule")
+    print("  xmap csvip                  : Bật / Tắt sử dụng Capsule Đặc Biệt (bay nhanh)")
+    print("  xmap cs                     : Bật / Tắt sử dụng Capsule Thường (bay nhanh)")
+    print("  xmap path <from> <to>       : Tra cứu lộ trình tối ưu giữa 2 map (vd: xmap path 0 109)")
+    print("  xmap list                   : Xem danh sách các nhóm bản đồ")
+    print("-" * 65)
+    print("  [TIỆN ÍCH KHÁC]")
+    print("  map                         : Xem thông tin bản đồ hiện tại, tọa độ và waypoints")
+    print("  zone [id]                   : Xem danh sách khu hoặc đổi khu (vd: zone 5)")
+    print("  chat <nội dung>             : Chat trong bản đồ")
+    print("  info                        : In lại thông tin nhân vật")
+    print("  help                        : Hiển thị bảng trợ giúp lệnh này")
+    print("  exit / quit                 : Đăng xuất và thoát chương trình")
+    print("=" * 65 + "\n")
+
 
 
 def print_boss_list(client: ClientNRO, show_all: bool = False):
@@ -387,7 +405,110 @@ def interactive_cli(client: ClientNRO):
                 ok, msg = client.go_to_boss(target)
                 print(f"[*] {msg}")
 
+        # ----------------------------------------------------------------------
+        # CÁC LỆNH CHIẾN ĐẤU & TÀN SÁT (FOCUS, TELE, AK, TÀN SÁT)
+        # ----------------------------------------------------------------------
+        elif cmd == "focus":
+            t_type = args[0] if args else ""
+            q = " ".join(args[1:]) if len(args) > 1 else None
+            ok, msg = client.focus(t_type, q)
+            print(f"[*] {msg}")
+
+        elif cmd in ("tele", "tp"):
+            target = " ".join(args) if args else None
+            ok, msg = client.teleport_to(target)
+            print(f"[*] {msg}")
+
+        elif cmd == "ak":
+            enable = None
+            if args:
+                if args[0].lower() in ("on", "1", "true", "start"):
+                    enable = True
+                elif args[0].lower() in ("off", "0", "false", "stop"):
+                    enable = False
+            is_on = client.toggle_ak(enable)
+            print(f"[*] Tự động đánh (AK): {'BẬT' if is_on else 'TẮT'}!")
+
+        elif cmd in ("ts", "tansat"):
+            if not args:
+                is_on = client.toggle_tansat()
+                mode_str = "Quái" if client.combat_manager.tansat_mode == "mob" else ("Người chơi (Auto PK)" if client.combat_manager.tansat_mode in ("player", "char") else "Toàn bộ (Quái & Người)")
+                print(f"[*] Tàn sát ({mode_str}): {'BẬT' if is_on else 'TẮT'}!")
+            else:
+                sub = args[0].lower()
+                if sub in ("on", "start"):
+                    client.toggle_tansat(True)
+                    print("[*] Tàn sát: BẬT!")
+                elif sub in ("off", "stop"):
+                    client.toggle_tansat(False)
+                    print("[*] Tàn sát: TẮT!")
+                elif sub in ("mob", "quai", "m"):
+                    client.toggle_tansat(True, mode="mob")
+                    print("[*] Đã bật tàn sát Quái vật!")
+                elif sub in ("player", "char", "pk", "nguoi", "p", "c"):
+                    client.toggle_tansat(True, mode="player")
+                    print("[*] Đã bật tàn sát Người chơi (Auto PK)!")
+                elif sub in ("all", "tatca"):
+                    client.toggle_tansat(True, mode="all")
+                    print("[*] Đã bật tàn sát Toàn bộ (Cả quái và người chơi)!")
+                elif sub in ("type", "addtm"):
+                    if len(args) > 1 and args[1].isdigit():
+                        tid = int(args[1])
+                        client.combat_manager.add_mob_type_target(tid)
+                        print(f"[*] Đã cập nhật loại quái Template ID {tid} trong danh sách tàn sát: {list(client.combat_manager.target_mob_types)}")
+                    else:
+                        print("Cú pháp: ts type <template_id> (Ví dụ: ts type 1)")
+                elif sub in ("id", "addm", "mobid"):
+                    if len(args) > 1 and args[1].isdigit():
+                        mid = int(args[1])
+                        client.combat_manager.add_mob_target(mid)
+                        print(f"[*] Đã cập nhật quái ID {mid} trong danh sách tàn sát: {list(client.combat_manager.target_mob_ids)}")
+                    else:
+                        print("Cú pháp: ts id <mob_id> (Ví dụ: ts id 3)")
+                elif sub in ("clear", "clrm", "reset"):
+                    client.combat_manager.clear_mob_targets()
+                    print("[*] Đã xoá bộ lọc quái (đang tàn sát toàn bộ quái trong map)!")
+                else:
+                    print(f"Không rõ tham số '{sub}'. Cú pháp: ts [on|off|mob|pk|all|type <id>|id <id>|clear]")
+
+        elif cmd == "nsq":
+            client.combat_manager.avoid_super_mob = not client.combat_manager.avoid_super_mob
+            print(f"[*] Né siêu quái (nsq): {'BẬT' if client.combat_manager.avoid_super_mob else 'TẮT'}!")
+
+        elif cmd == "anhat":
+            is_on = client.toggle_auto_pick()
+            print(f"[*] Tự động nhặt đồ (anhat): {'BẬT' if is_on else 'TẮT'}!")
+
+        elif cmd == "cnn":
+            client.combat_manager.pick_gem_only = not client.combat_manager.pick_gem_only
+            client.combat_manager.auto_pick = True
+            print(f"[*] Chế độ chỉ nhặt ngọc (cnn): {'BẬT' if client.combat_manager.pick_gem_only else 'TẮT'}!")
+
+        elif cmd == "abf":
+            if args and args[0].isdigit():
+                val = int(args[0]) / 100.0
+                client.combat_manager.pean_threshold = val
+                client.combat_manager.auto_pean = True
+                print(f"[*] Đã bật tự động dùng đậu khi HP/KI dưới {int(val * 100)}%!")
+            else:
+                is_on = client.toggle_auto_pean()
+                print(f"[*] Tự động dùng đậu (abf): {'BẬT' if is_on else 'TẮT'} (Ngưỡng: {int(client.combat_manager.pean_threshold * 100)}%)!")
+
+        elif cmd == "combat":
+            st = client.combat_status()
+            print("\n=== CẤU HÌNH CHIẾN ĐẤU & TÀN SÁT ===")
+            print(f"- Tự động đánh (AK):     {'BẬT' if st['is_ak'] else 'TẮT'}")
+            print(f"- Tàn sát (Slaughter):    {'BẬT' if st['is_tansat'] else 'TẮT'} (Chế độ: {st['tansat_mode']})")
+            print(f"- Né siêu quái (nsq):     {'BẬT' if st['avoid_super_mob'] else 'TẮT'}")
+            print(f"- Tự nhặt đồ (anhat):     {'BẬT' if st['auto_pick'] else 'TẮT'}")
+            print(f"- Chỉ nhặt ngọc (cnn):    {'BẬT' if st['pick_gem_only'] else 'TẮT'}")
+            print(f"- Tự dùng đậu (abf):      {'BẬT' if st['auto_pean'] else 'TẮT'}")
+            print(f"- Lọc quái ID:            {st['target_mob_ids'] or 'Tất cả'}")
+            print(f"- Lọc loại quái:          {st['target_mob_types'] or 'Tất cả'}")
+            print(f"- Tiêu điểm Focus:        {st['focus_kind']}: {st['focus_target']}\n")
+
         elif cmd == "xmap":
+
 
             if not args:
                 print("Cú pháp: xmap <id|tên|nha|cold...>. Gõ 'help' để xem chi tiết.")

@@ -293,3 +293,70 @@ class Service:
             self.session.sendMessage(m)
         except Exception as ex:
             print(f"[Service] useItem error: {ex}")
+
+    def sendPlayerAttack(self, vMob: Optional[List] = None, vChar: Optional[List] = None, attack_type: int = -1) -> None:
+        """
+        Gửi lệnh tấn công quái hoặc người chơi (mô phỏng Service.sendPlayerAttack trong C#):
+        - Chỉ quái: cmd 54 (danh sách mobId + cdir)
+        - Chỉ người: cmd -60 (danh sách charID + cdir)
+        - Cả hai: cmd -4 (type 1) hoặc cmd 67 (type 2)
+        """
+        vMob = vMob or []
+        vChar = vChar or []
+        if not vMob and not vChar:
+            return
+
+        try:
+            char = Char.myCharz()
+            cdir = getattr(char, "cdir", 1)
+
+            if len(vMob) > 0 and len(vChar) > 0:
+                cmd = -4 if attack_type == 1 else 67
+                m = Message(cmd)
+                m.writer().writeByte(len(vMob))
+                for mob in vMob:
+                    m_id = getattr(mob, "mobId", mob) if not isinstance(mob, int) else mob
+                    m.writer().writeByte(m_id)
+                for ch in vChar:
+                    c_id = getattr(ch, "charID", ch) if not isinstance(ch, int) else ch
+                    m.writer().writeInt(c_id)
+                m.writer().writeByte(cdir)
+                self.session.sendMessage(m)
+
+            elif len(vMob) > 0:
+                m = Message(54)
+                for mob in vMob:
+                    m_id = getattr(mob, "mobId", mob) if not isinstance(mob, int) else mob
+                    m.writer().writeByte(m_id)
+                m.writer().writeByte(cdir)
+                self.session.sendMessage(m)
+
+            elif len(vChar) > 0:
+                m = Message(-60)
+                for ch in vChar:
+                    c_id = getattr(ch, "charID", ch) if not isinstance(ch, int) else ch
+                    m.writer().writeInt(c_id)
+                m.writer().writeByte(cdir)
+                self.session.sendMessage(m)
+
+        except Exception as ex:
+            print(f"[Service] sendPlayerAttack error: {ex}")
+
+    def selectSkill(self, skill_template_id: int) -> None:
+        """Chọn skill xuất chiêu (cmd 34 trong C# Service.cs)."""
+        try:
+            m = Message(34)
+            m.writer().writeShort(skill_template_id)
+            self.session.sendMessage(m)
+        except Exception as ex:
+            print(f"[Service] selectSkill error: {ex}")
+
+    def pickItem(self, item_map_id: int) -> None:
+        """Gửi lệnh nhặt vật phẩm rơi trên đất (cmd -20 trong C# Service.cs)."""
+        try:
+            m = Message(-20)
+            m.writer().writeShort(item_map_id)
+            self.session.sendMessage(m)
+        except Exception as ex:
+            print(f"[Service] pickItem error: {ex}")
+

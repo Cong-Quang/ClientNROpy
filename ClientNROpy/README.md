@@ -1,47 +1,52 @@
-# ClientNROpy - Xmap & Boss Hunting Mod
+# ClientNROpy - Headless NRO Client & Mod Toolkit
 
-> **ClientNROpy** là bộ công cụ client game Chú Bé Rồng Online (NRO) chạy chế độ dòng lệnh headless bằng Python, tích hợp hệ thống **Xmap** (Auto Map Navigation) và hệ thống **Săn Boss** mô phỏng chuẩn xác từ mod `Mod/Boss.cs` và `Mod/Xmap/` của Dragonboy C#.
+> **ClientNROpy** là bộ công cụ client game Chú Bé Rồng Online (Dragon Boy) chạy chế độ dòng lệnh headless hoàn toàn bằng Python. Tích hợp đầy đủ các tính năng mod cao cấp từ C# (`Mod/Xmap/`, `Mod/Boss.cs`, `Mod/PickMob/`, `Mod/Auto/AutoSendAttack.cs`, `Mod/Utils.cs`).
 
 ---
 
-## 📍 Vị Trí Mã Nguồn (Nó Ở Đâu?)
+## 📍 Cấu Trúc Mã Nguồn (Nó Ở Đâu?)
 
-### 1. Hệ thống Quản Lý & Săn Boss (`Mod/Boss.cs`)
+### 1. Hệ thống Chiến Đấu & Tàn Sát (`Mod/PickMob/`, `Mod/Auto/`, `Mod/Utils.cs`)
+- [`ClientNROpy/combat_manager.py`](file:///c:/data/nro/ClientNROpy/combat_manager.py): Bộ điều khiển trung tâm `CombatManager` quản lý:
+  - **Focus**: Tiêu điểm nhắm mục tiêu quái, người chơi, vật phẩm, NPC.
+  - **Teleport**: Dịch chuyển tức thời toạ độ `(x, y)` hoặc dịch chuyển đến thực thể.
+  - **AK (Auto Attack)**: Tự động đánh mục tiêu đang focus theo chu kỳ.
+  - **Tàn Sát (Slaughter / Auto Mob / Auto PK)**: Tự động đánh toàn bộ quái hoặc lọc theo loại quái, né siêu quái, tàn sát người chơi, tự nhặt đồ rơi và tự ăn đậu thần khi HP/KI thấp.
+- [`ClientNROpy/tests_combat.py`](file:///c:/data/nro/ClientNROpy/tests_combat.py): Bộ kiểm thử tự động toàn diện cho hệ thống chiến đấu và tàn sát (10 unit tests).
+
+### 2. Hệ thống Quản Lý & Săn Boss (`Mod/Boss.cs`)
 - [`ClientNROpy/boss.py`](file:///c:/data/nro/ClientNROpy/boss.py): Thực thể dữ liệu `Boss` lưu trữ tên, map, khu vực, thời gian sống (`Xh Ym Zs`), trạng thái sống/chết và người hạ gục.
-- [`ClientNROpy/boss_manager.py`](file:///c:/data/nro/ClientNROpy/boss_manager.py): Bộ quản lý `BossManager`, xử lý bóc tách thông báo ChatVip (cmd 93), cập nhật trạng thái khi người chơi vào map, và điều khiển Xmap tự động bay tới map + đổi khu của Boss.
-- [`ClientNROpy/chat_vip.py`](file:///c:/data/nro/ClientNROpy/chat_vip.py): Đối tượng tin nhắn ChatVip (cmd 93), tách biệt hoàn toàn logic bóc tách Boss sang `BossManager`.
-- [`ClientNROpy/tests_boss.py`](file:///c:/data/nro/ClientNROpy/tests_boss.py): Bộ kiểm thử tự động toàn diện cho hệ thống Boss.
+- [`ClientNROpy/boss_manager.py`](file:///c:/data/nro/ClientNROpy/boss_manager.py): Xử lý bóc tách thông báo ChatVip (cmd 93), quy tắc ánh xạ Map ID đặc biệt (Aru, Moori, Bojack, Ginyu Force), cập nhật thời gian thực khi vào cùng map, và tự động gọi Xmap bay tới Boss + đổi khu.
+- [`ClientNROpy/chat_vip.py`](file:///c:/data/nro/ClientNROpy/chat_vip.py): Đối tượng tin nhắn ChatVip (cmd 93), tách bạch sạch sẽ khỏi logic Boss.
+- [`ClientNROpy/tests_boss.py`](file:///c:/data/nro/ClientNROpy/tests_boss.py): Bộ kiểm thử độc lập cho tính năng Boss (8 unit tests).
 
-### 2. Hệ thống Tìm Đường Xmap (`Mod/Xmap/`)
+### 3. Hệ thống Tìm Đường Xmap (`Mod/Xmap/`)
 Toàn bộ mã nguồn nằm tại thư mục: [`ClientNROpy/xmap/`](file:///c:/data/nro/ClientNROpy/xmap)
-- [`xmap_controller.py`](file:///c:/data/nro/ClientNROpy/xmap/xmap_controller.py): Vòng đời điều khiển máy trạng thái di chuyển đa luồng (Background Thread).
-- [`xmap_data.py`](file:///c:/data/nro/ClientNROpy/xmap/xmap_data.py): Dữ liệu liên kết đồ thị (chuỗi AutoWaypoint, tàu vũ trụ, menu NPC, Capsule).
-- [`xmap_algorithm.py`](file:///c:/data/nro/ClientNROpy/xmap/xmap_algorithm.py): Thuật toán Dijkstra tìm kiếm lộ trình tối ưu.
-- [`xmap_executor.py`](file:///c:/data/nro/ClientNROpy/xmap/xmap_executor.py): Thực thi các bước di chuyển nhân vật và gửi gói tin qua map.
-- [`map_data.py`](file:///c:/data/nro/ClientNROpy/xmap/map_data.py): Danh bạ 160 map tiếng Việt và bộ phân giải alias (`nha`, `lang`, `cold`, `ttvt`...).
-- [`xmap_cli.py`](file:///c:/data/nro/ClientNROpy/xmap_cli.py): Công cụ dòng lệnh tra cứu đường đi ngoại tuyến.
-- [`tests_xmap.py`](file:///c:/data/nro/ClientNROpy/tests_xmap.py): Bộ kiểm thử tự động Xmap qua các map yêu cầu.
+- [`xmap_controller.py`](file:///c:/data/nro/ClientNROpy/xmap/xmap_controller.py): Vòng đời điều khiển máy trạng thái di chuyển đa luồng.
+- [`xmap_data.py`](file:///c:/data/nro/ClientNROpy/xmap/xmap_data.py): Dữ liệu liên kết đồ thị (AutoWaypoint, tàu vũ trụ, NPC, Capsule Đặc Biệt/Thường).
+- [`xmap_algorithm.py`](file:///c:/data/nro/ClientNROpy/xmap/xmap_algorithm.py): Thuật toán Dijkstra tìm kiếm lộ trình ngắn nhất.
+- [`xmap_executor.py`](file:///c:/data/nro/ClientNROpy/xmap/xmap_executor.py): Thực thi di chuyển nhân vật và chuyển map.
+- [`map_data.py`](file:///c:/data/nro/ClientNROpy/xmap/map_data.py): Danh bạ 160 map và bộ phân giải alias (`nha`, `lang`, `cold`, `ttvt`...).
+- [`tests_xmap.py`](file:///c:/data/nro/ClientNROpy/tests_xmap.py): Bộ kiểm thử tự động Xmap (14 unit tests).
 
 ---
 
-## 🎯 Tính Năng Săn Boss (Tương Tự Boss.cs Trong Mod)
+## 🎯 Chi Tiết Tính Năng Chiến Đấu & Tàn Sát
 
-1. **Bóc tách thông báo tự động (cmd 93 - ChatVip)**:
-   - Tự động phát hiện Boss xuất hiện: Tên Boss, Tên Map, Số Khu vực (đa ngôn ngữ Việt/Anh/Indo).
-   - Tự động phát hiện Boss bị hạ gục: Người chơi tiêu diệt và thời gian kết thúc.
-   - Bỏ qua ngoại lệ Tiểu đội sát thủ Ginyu ở các map Nappa (79, 82, 83).
-2. **Quy tắc ánh xạ Map ID đặc biệt**:
-   - `"Vách núi Aru"` $\rightarrow$ Map 42 (Vách núi đen)
-   - `"Vách núi Moori"` $\rightarrow$ Map 43 (Vách núi Namếc)
-   - `"Trạm tàu vũ trụ"`:
-     - Nhóm Tiểu đội sát thủ (`Số 1`, `Tiểu đội trưởng`...) $\rightarrow$ Map 25 (Namếc)
-     - Nhóm Bojack (`Bojack`, `Bujin`, `Bido`, `Zangya`) $\rightarrow$ Map 24 (Trái Đất)
-3. **Theo dõi trạng thái thời gian thực**:
-   - Tự động tính thời gian sống của Boss: định dạng chuẩn `{hours}h{minutes}m{seconds}s`.
-   - Khi vào cùng map với Boss: Tự phát hiện khu vực nếu Boss chưa có khu, hoặc đánh dấu đã chết nếu Boss đã bị tiêu diệt / không còn trong khu.
-4. **Tự động bay đến Boss (`boss go <stt|tên>`)**:
-   - Kết hợp chặt chẽ với Xmap: Tự động tính đường và kích hoạt bay tới map của Boss.
-   - Khi tới nơi: Tự động gửi lệnh đổi sang đúng khu vực của Boss!
+| Tính Năng | Lệnh CLI | Mô Tả |
+| :--- | :--- | :--- |
+| **Focus** | `focus [mob\|char\|item\|clear]` | Nhắm tiêu điểm vào quái vật, người chơi, hoặc vật phẩm rơi dưới đất. |
+| **Teleport** | `tele [x y\|mob\|char\|item\|wp]` | Dịch chuyển tức thời không cần đồ họa chuẩn mod NRO (bước đệm gửi `charMove`). |
+| **AK (Auto Attack)** | `ak [on\|off]` | Tự động đánh liên tục mục tiêu đang nhắm (focus) sau mỗi ~150ms. |
+| **Tàn Sát Quái** | `ts` hoặc `ts mob` | Quét và tự động dịch chuyển áp sát tiêu diệt toàn bộ quái trong bản đồ. |
+| **Lọc Loại Quái** | `ts type <template_id>` | Chỉ tàn sát 1 loại quái nhất định (tương ứng `addtm` trong mod C#). |
+| **Lọc Quái Cụ Thể** | `ts id <mob_id>` | Chỉ tàn sát quái có ID chỉ định (tương ứng `addm` trong mod C#). |
+| **Tàn Sát Người (PK)** | `ts player` hoặc `ts pk` | Tự động quét người chơi khác trong map, tele áp sát và gửi gói tin tấn công. |
+| **Né Siêu Quái** | `nsq` | Bỏ qua quái có lượng HP bất thường / siêu quái (mặc định Bật). |
+| **Tự Nhặt Đồ** | `anhat` | Tự động phát hiện đồ rơi trên đất, tele tới nhặt (`pickItem` cmd -20). |
+| **Chỉ Nhặt Ngọc** | `cnn` | Cài đặt nhanh chỉ nhặt ngọc xanh / ngọc khoá (ID 77, 861). |
+| **Tự Ăn Đậu** | `abf [ngưỡng %]` | Tự động thu hoạch và dùng đậu thần khi HP hoặc KI thấp hơn ngưỡng (mặc định 20%). |
+| **Xem Cấu Hình** | `combat` | In toàn bộ bảng trạng thái cấu hình chiến đấu và tàn sát hiện tại. |
 
 ---
 
@@ -54,14 +59,31 @@ python -m ClientNROpy.main
 
 Tại dấu nhắc `nro> `, các lệnh hỗ trợ:
 
-### 👑 Lệnh Săn Boss:
-- `boss`: Xem danh sách các Boss đang còn sống (STT, Tên, Map, Khu, Thời gian đã xuất hiện).
-- `boss all` (hoặc `boss history`): Xem toàn bộ lịch sử Boss (kể cả Boss đã chết và tên người hạ).
-- `boss go <stt|tên>`: Tự động Xmap bay đến map của Boss và tự đổi sang đúng khu vực của Boss.
-  - Ví dụ: `boss go 1`, `boss go Broly`, `boss go Fide`, `boss go Cooler`.
+### ⚔️ Chiến Đấu & Tàn Sát:
+- `focus mob`: Focus vào con quái gần nhất trong map.
+- `focus char Broly`: Focus vào nhân vật có tên chứa 'Broly'.
+- `focus clear`: Bỏ chọn mục tiêu focus.
+- `tele 500 300`: Dịch chuyển đến toạ độ (500, 300).
+- `tele mob 2`: Dịch chuyển đến con quái ID 2.
+- `tele`: Dịch chuyển đến mục tiêu đang focus.
+- `ak`: Bật / Tắt tự động đánh.
+- `ts`: Bật / Tắt tàn sát quái trong map.
+- `ts type 1`: Chỉ đánh loại quái có template ID 1.
+- `ts clear`: Xoá bộ lọc quái (đánh tất cả quái).
+- `ts pk`: Bật tàn sát người chơi (Auto PK).
+- `nsq`: Bật / Tắt né siêu quái.
+- `anhat`: Bật / Tắt tự động nhặt đồ.
+- `cnn`: Chế độ chỉ nhặt ngọc.
+- `abf 30`: Bật tự động dùng đậu khi HP/KI dưới 30%.
+- `combat`: Xem bảng trạng thái cấu hình chiến đấu.
+
+### 👑 Quản Lý & Săn Boss:
+- `boss`: Xem danh sách các Boss đang còn sống (STT, Tên, Map, Khu, Thời gian).
+- `boss all`: Xem toàn bộ lịch sử các Boss (kể cả đã bị tiêu diệt và người hạ).
+- `boss go <stt|tên>`: Tự động dùng Xmap bay đến map của Boss và tự chuyển sang đúng khu của Boss!
 - `boss clear`: Xóa danh sách lịch sử Boss đã lưu.
 
-### 🗺️ Lệnh Xmap:
+### 🗺️ Tự Động Tìm Đường Xmap:
 - `xmap <id|tên>`: Di chuyển đến map chỉ định (Ví dụ: `xmap 0`, `xmap 6`, `xmap 109`, `xmap nha`, `xmap cold`).
 - `xmap status`: Xem trạng thái, tiến độ và cấu hình Capsule.
 - `xmap csvip`: Bật / Tắt dùng **Capsule Đặc Biệt (ID 194)** bay thẳng (mặc định: BẬT).
@@ -70,7 +92,7 @@ Tại dấu nhắc `nro> `, các lệnh hỗ trợ:
 - `xmap path <from> <to>`: Tra cứu lộ trình tối ưu giữa 2 map (Ví dụ: `xmap path 0 109`).
 - `xmap list`: Xem danh sách tất cả các map theo hành tinh.
 
-### 🛠️ Lệnh Khác:
+### 🛠️ Tiện Ích Khác:
 - `map`: Xem thông tin map hiện tại, toạ độ x, y và waypoints.
 - `zone [id]`: Xem danh sách khu vực hoặc đổi khu (Ví dụ: `zone 5`).
 - `chat <nội dung>`: Gửi tin nhắn chat trong bản đồ.
@@ -80,9 +102,10 @@ Tại dấu nhắc `nro> `, các lệnh hỗ trợ:
 
 ---
 
-## 🧪 Chạy Kiểm Thử Tự Động (Unit Tests)
+## 🧪 Chạy Toàn Bộ Kiểm Thử Tự Động (Unit Tests)
 
-Chạy toàn bộ 32 unit tests của hệ thống:
+Hệ thống có tổng cộng **42 unit tests** kiểm thử tự động toàn bộ tính năng:
 ```powershell
 python -m unittest discover -s ClientNROpy -p "tests*.py"
 ```
+Kết quả kiểm thử: **42/42 tests PASSED (OK)**.

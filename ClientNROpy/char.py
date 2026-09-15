@@ -3,7 +3,7 @@
 Mô hình Char mô phỏng Char.cs trong C#.
 """
 
-from typing import Optional, List
+from typing import Optional, List, Any, Tuple
 from .pet import Pet
 from .magic_tree import MagicTree
 from .map_info import MapInfo
@@ -68,6 +68,54 @@ class Char:
         self.cFlag: int = 0
         self.isInvisiblez: bool = False
         self.isMonkey: int = 0
+
+        # Tiêu điểm nhắm (Focus) mô phỏng Char.cs trong C#
+        self.mobFocus: Optional[Any] = None
+        self.charFocus: Optional[Any] = None
+        self.itemFocus: Optional[Any] = None
+        self.npcFocus: Optional[Any] = None
+        self.skillTemplateId: int = 0
+
+    def focus_mob(self, mob: Any) -> None:
+        """Nhắm mục tiêu vào quái vật."""
+        self.mobFocus = mob
+        self.charFocus = None
+        self.itemFocus = None
+        self.npcFocus = None
+
+    def focus_char(self, target_char: Any) -> None:
+        """Nhắm mục tiêu vào người chơi khác."""
+        self.charFocus = target_char
+        self.mobFocus = None
+        self.itemFocus = None
+        self.npcFocus = None
+
+    def focus_item(self, item: Any) -> None:
+        """Nhắm mục tiêu vào vật phẩm trên đất."""
+        self.itemFocus = item
+        self.mobFocus = None
+        self.charFocus = None
+        self.npcFocus = None
+
+    def clear_focus(self) -> None:
+        """Hủy toàn bộ mục tiêu đang nhắm."""
+        self.mobFocus = None
+        self.charFocus = None
+        self.itemFocus = None
+        self.npcFocus = None
+
+    def get_focused_target(self):
+        """Lấy thông tin đối tượng đang focus hiện tại."""
+        if self.mobFocus:
+            return ("mob", self.mobFocus)
+        if self.charFocus:
+            return ("char", self.charFocus)
+        if self.itemFocus:
+            return ("item", self.itemFocus)
+        if self.npcFocus:
+            return ("npc", self.npcFocus)
+        return (None, None)
+
 
     _myCharz: Optional["Char"] = None
 

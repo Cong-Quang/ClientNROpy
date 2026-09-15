@@ -5,7 +5,7 @@ Lớp điều khiển cấp cao (ClientNRO).
 thành một API dễ sử dụng cho các tool và bot game headless.
 """
 
-from typing import Optional, List, Callable, Union, Tuple
+from typing import Optional, List, Callable, Union, Tuple, Any, Dict
 from .session import Session_ME
 from .controller import Controller
 from .service import Service
@@ -19,6 +19,7 @@ from .player_data import PlayerData
 from .chat_vip import ChatVip
 from .boss import Boss
 from .boss_manager import BossManager
+from .combat_manager import CombatManager
 from .xmap import XmapController, MapNext
 
 
@@ -48,6 +49,10 @@ class ClientNRO:
 
         # Bộ quản lý và săn Boss (Mod/Boss.cs)
         self.boss_manager: BossManager = BossManager(self)
+
+        # Bộ điều khiển chiến đấu: Focus, Teleport, AK, Tàn Sát
+        self.combat_manager: CombatManager = CombatManager(self)
+
 
 
     def connect(self, host: Optional[str] = None, port: Optional[int] = None) -> None:
@@ -279,4 +284,62 @@ class ClientNRO:
     def on_boss_killed(self, callback: Callable[[Boss], None]) -> None:
         """Lắng nghe thông báo Boss bị tiêu diệt."""
         self.boss_manager.on_boss_killed_callbacks.append(callback)
+
+    # --------------------------------------------------------------------------
+    # Các hàm chiến đấu: Focus, Teleport, AK, Tàn Sát (Auto Attack / Auto PK)
+    # --------------------------------------------------------------------------
+    def focus(self, target_type: str = "", query: Optional[Union[int, str]] = None) -> Tuple[bool, str]:
+        """
+        Nhắm tiêu điểm (focus) vào quái, người chơi, hoặc vật phẩm.
+        target_type: 'mob', 'char'/'player', 'item', 'clear', hoặc rỗng để xem hiện tại.
+        """
+        return self.combat_manager.focus(target_type, query)
+
+    def teleport(self, x: int, y: int) -> bool:
+        """Dịch chuyển tức thời đến toạ độ (x, y) không cần đồ hoạ."""
+        return self.combat_manager.teleport(x, y)
+
+    def teleport_to(self, target: Any) -> Tuple[bool, str]:
+        """Dịch chuyển tức thời tới đối tượng (Mob, Char, ItemMap, Waypoint, hoặc chuỗi truy vấn)."""
+        return self.combat_manager.teleport_to(target)
+
+    def attack(self, target: Any = None) -> bool:
+        """Tấn công mục tiêu (hoặc mục tiêu đang focus)."""
+        return self.combat_manager.attack_target(target)
+
+    def pick_item(self, item_map_id: int) -> None:
+        """Nhặt vật phẩm rơi dưới đất theo ID."""
+        self.service.pickItem(item_map_id)
+
+    def toggle_ak(self, enable: Optional[bool] = None) -> bool:
+        """Bật / Tắt chế độ tự động đánh (AK - Auto Attack)."""
+        return self.combat_manager.toggle_ak(enable)
+
+    def toggle_tansat(self, enable: Optional[bool] = None, mode: str = "mob") -> bool:
+        """
+        Bật / Tắt chế độ tàn sát tự động.
+        mode: 'mob' (quái), 'player'/'char' (người chơi), 'all' (cả hai).
+        """
+        return self.combat_manager.toggle_tansat(enable, mode=mode)
+
+    def toggle_auto_pick(self, enable: Optional[bool] = None) -> bool:
+        """Bật / Tắt tự động nhặt vật phẩm rơi trên đất."""
+        if enable is not None:
+            self.combat_manager.auto_pick = enable
+        else:
+            self.combat_manager.auto_pick = not self.combat_manager.auto_pick
+        return self.combat_manager.auto_pick
+
+    def toggle_auto_pean(self, enable: Optional[bool] = None) -> bool:
+        """Bật / Tắt tự động dùng đậu thần khi HP/KI thấp."""
+        if enable is not None:
+            self.combat_manager.auto_pean = enable
+        else:
+            self.combat_manager.auto_pean = not self.combat_manager.auto_pean
+        return self.combat_manager.auto_pean
+
+    def combat_status(self) -> Dict[str, Any]:
+        """Lấy toàn bộ trạng thái cấu hình chiến đấu hiện tại."""
+        return self.combat_manager.get_status()
+
 
