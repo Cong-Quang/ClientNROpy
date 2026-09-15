@@ -34,6 +34,12 @@ class Char:
         self.cPower: int = 0
         self.cTiemNang: int = 0
         self.nClass: int = 0
+        self.cHPGoc: int = 0
+        self.cMPGoc: int = 0
+        self.cDamGoc: int = 0
+        self.cDefGoc: int = 0
+        self.cCriticalGoc: int = 0
+        self.cspeed: int = 5
         self.cHP: int = 0
         self.cHPFull: int = 0
         self.cMP: int = 0

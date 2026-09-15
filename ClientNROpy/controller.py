@@ -691,6 +691,53 @@ class Controller(IMessageHandler):
                 char.luongKhoa = msg.reader().readInt()
                 return
 
+            # ------------------------------------------------------------------
+            # 19b. THÔNG TIN CHỈ SỐ BẢN THÂN (cmd -42: MY_INFO / ME_LOAD_INFO)
+            # ------------------------------------------------------------------
+            if cmd == -42:
+                char = Char.myCharz()
+                char.cHPGoc = msg.readInt3Byte()
+                char.cMPGoc = msg.readInt3Byte()
+                char.cDamGoc = msg.reader().readInt()
+                char.cHPFull = msg.readInt3Byte()
+                char.cMPFull = msg.readInt3Byte()
+                char.cHP = msg.readInt3Byte()
+                char.cMP = msg.readInt3Byte()
+                char.cspeed = msg.reader().readByte()
+                msg.reader().readByte()  # hpFrom1000TiemNang
+                msg.reader().readByte()  # mpFrom1000TiemNang
+                msg.reader().readByte()  # damFrom1000TiemNang
+                char.cDamFull = msg.reader().readInt()
+                char.cDefull = msg.reader().readInt()
+                char.cCriticalFull = msg.reader().readByte()
+                char.cTiemNang = msg.reader().readLong()
+                char.expForOneAdd = msg.reader().readShort()
+                char.cDefGoc = msg.reader().readShort()
+                char.cCriticalGoc = msg.reader().readByte()
+                print(f"[Controller] My Info loaded: HP={char.cHP:,}/{char.cHPFull:,}, MP={char.cMP:,}/{char.cMPFull:,}, Dam={char.cDamFull:,}")
+                return
+
+            # ------------------------------------------------------------------
+            # 19c. NHÂN VẬT HỒI SINH SỐNG LẠI (cmd 84: LIVE_FROM_DEAD)
+            # ------------------------------------------------------------------
+            if cmd == 84:
+                charID = msg.reader().readInt()
+                char = Char.myCharz()
+                if charID == char.charID:
+                    char.cHP = char.cHPFull
+                    char.cMP = char.cMPFull
+                    char.cx = msg.reader().readShort()
+                    char.cy = msg.reader().readShort()
+                    char.statusMe = 1
+                elif charID in char.mapInfo.chars:
+                    c = char.mapInfo.chars[charID]
+                    c.cHP = c.cHPFull
+                    c.cMP = c.cMPFull
+                    c.cx = msg.reader().readShort()
+                    c.cy = msg.reader().readShort()
+                    c.statusMe = 1
+                return
+
         except Exception as ex:
             if self.debug:
                 print(f"[Controller] Error parsing message {cmd}: {ex}")
@@ -826,6 +873,18 @@ class Controller(IMessageHandler):
                 char = Char.myCharz()
                 char.nClass = msg.reader().readByte()
                 char.cTiemNang = msg.reader().readLong()
+
+            elif sub == 4:
+                char = Char.myCharz()
+                char.xu = msg.reader().readLong()
+                char.luong = msg.reader().readInt()
+                char.cHP = msg.readInt3Byte()
+                char.cMP = msg.readInt3Byte()
+                char.luongKhoa = msg.reader().readInt()
+
+            elif sub == 5:
+                char = Char.myCharz()
+                char.cHP = msg.readInt3Byte()
         except Exception as ex:
             if self.debug:
                 print(f"[Controller] messageSubCommand error: {ex}")

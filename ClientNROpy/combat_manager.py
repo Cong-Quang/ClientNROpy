@@ -365,7 +365,10 @@ class CombatManager:
     def _step_ak(self) -> None:
         """Chu kỳ gửi lệnh đánh mục tiêu đang focus mô phỏng AutoSendAttack.cs."""
         my_char = self._get_my_char()
-        if my_char is None or my_char.cHP <= 0:
+        if my_char is None:
+            return
+        is_dead = (my_char.cHPFull > 0 and my_char.cHP <= 0) or getattr(my_char, "statusMe", 1) == 14
+        if is_dead:
             return
 
         if my_char.mobFocus:
@@ -421,8 +424,9 @@ class CombatManager:
         if my_char is None:
             return
 
-        # 1. Xử lý khi nhân vật chết
-        if my_char.cHP <= 0 or getattr(my_char, "statusMe", 1) == 14:
+        # 1. Xử lý khi nhân vật chết thật sự (chỉ khi có cHPFull > 0 và cHP <= 0, hoặc statusMe == 14)
+        is_dead = (my_char.cHPFull > 0 and my_char.cHP <= 0) or getattr(my_char, "statusMe", 1) == 14
+        if is_dead:
             if self.auto_revive:
                 self.service.returnTownFromDead()
                 time.sleep(1.0)

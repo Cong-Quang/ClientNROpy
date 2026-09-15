@@ -189,8 +189,9 @@ class BossHunter:
         if my_char is None:
             return
 
-        # Kiểm tra nhân vật bị chết ở bất kỳ trạng thái nào
-        if my_char.cHP <= 0 or getattr(my_char, "statusMe", 1) == 14:
+        # Kiểm tra nhân vật bị chết thật sự ở bất kỳ trạng thái nào
+        is_dead = (my_char.cHPFull > 0 and my_char.cHP <= 0) or getattr(my_char, "statusMe", 1) == 14
+        if is_dead:
             if self.auto_revive and self.state != self.STATE_REVIVING:
                 self._change_state(self.STATE_REVIVING)
 
@@ -403,7 +404,8 @@ class BossHunter:
     def _handle_reviving(self, my_char: Char) -> None:
         """Hồi sinh sau khi bị đánh chết và tự động quay lại map Boss."""
         # 1. Gửi lệnh hồi sinh về thành
-        if my_char.cHP <= 0 or getattr(my_char, "statusMe", 1) == 14:
+        is_dead = (my_char.cHPFull > 0 and my_char.cHP <= 0) or getattr(my_char, "statusMe", 1) == 14
+        if is_dead:
             self.status_message = "Nhân vật đã bị Boss hạ gục! Đang tự động hồi sinh về thành..."
             if self.client and hasattr(self.client, "service"):
                 self.client.service.returnTownFromDead()

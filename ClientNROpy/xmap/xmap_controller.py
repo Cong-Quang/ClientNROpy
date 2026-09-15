@@ -228,8 +228,9 @@ class XmapController:
 
                 # 3. Đang ở map bắt đầu của chặng hiện tại
                 if curr_map == self.way[self.index_way].map_start:
-                    # Kiểm tra nếu nhân vật bị chết
-                    if self.client.myChar.cHP <= 0 or self.client.myChar.statusMe == 14:
+                    # Kiểm tra nếu nhân vật bị chết thật sự
+                    is_dead = (self.client.myChar.cHPFull > 0 and self.client.myChar.cHP <= 0) or self.client.myChar.statusMe == 14
+                    if is_dead:
                         self._log("Nhân vật bị kiệt sức! Tự động hồi sinh về thành...")
                         self.client.service.returnTownFromDead()
                         self.way = None
