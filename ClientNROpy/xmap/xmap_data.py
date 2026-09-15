@@ -230,6 +230,7 @@ class XmapData:
         cgender: int = 0,
         capsule_map_names: Optional[List[str]] = None,
         capsule_item_id: int = 194,
+        map_capsule_return: int = -1,
     ) -> None:
         """
         Nạp các liên kết chuyển map trực tiếp từ Capsule vào vị trí map hiện tại.
@@ -237,30 +238,53 @@ class XmapData:
         """
         from .map_data import resolve_map_id
 
-        # 1. Nếu có danh sách map trả về từ server qua cmd -91
-        if capsule_map_names:
-            for select, name in enumerate(capsule_map_names):
-                to_id = resolve_map_id(name, cgender=cgender)
-                if to_id is not None and to_id != current_map:
-                    # Kiểm tra tránh trùng lặp
-                    if not any(step.to == to_id and step.type == TypeMapNext.Capsule for step in self.links[current_map]):
-                        self.links[current_map].append(
-                            MapNext(current_map, to_id, TypeMapNext.Capsule, [select, capsule_item_id])
-                        )
-            return
+        # 1. Danh mục các điểm đến chuẩn của Capsule VIP (item 194)
+        if capsule_item_id == 194:
+            standard_capsule_destinations = [
+                21 + cgender,  # Về nhà (0: Gohan House, 1: Moori House, 2: Broly House)
+                47,            # Rừng Karin
+                48,            # Hành tinh Kaio
+                154,           # Hành tinh Bill
+                0,             # Làng Aru
+                7,             # Làng Mori
+                14,            # Làng Kakarot
+                5,             # Đảo Kame
+                20,            # Vách núi đen
+                13,            # Đảo Guru
+                24 + cgender,  # Trạm tàu vũ trụ
+                27,            # Rừng Bamboo
+                19,            # Thành phố Vegeta
+                79,            # Núi khỉ đỏ
+                84,            # Siêu Thị
+                83,            # Hang khỉ đen
+                155,           # Hành tinh ngục tù
+                103,           # Võ đài Xên bọ hung
+                206,           # Địa Ngục
+                110,           # Hang băng
+                199,           # Vũ Trụ Số 9
+                198,           # Làng Vamchar
+            ]
+        else:
+            # Capsule Thường (item 193)
+            standard_capsule_destinations = [
+                21 + cgender,  # Về nhà
+                24 + cgender,  # Trạm tàu vũ trụ
+            ]
+            if map_capsule_return != -1 and map_capsule_return != current_map:
+                standard_capsule_destinations.append(map_capsule_return)
 
-        # 2. Danh mục các điểm đến chuẩn của Capsule VIP (dùng khi chạy giả lập / chưa nhận cmd -91)
-        standard_capsule_destinations = [
-            21 + cgender,  # Về nhà
-            24 + cgender,  # Trạm tàu vũ trụ
-            0, 1, 2, 3, 4, 5, 6,        # Trái Đất (Làng Aru, Đông Karin...)
-            7, 8, 9, 10, 11, 12, 13,    # Namếc (Làng Mori, Đảo Guru...)
-            14, 15, 16, 17, 18, 19, 20, # Xayda (Làng Kakarot, TPVGT...)
-            84,                         # Siêu thị
-        ]
-        for select, to_id in enumerate(standard_capsule_destinations):
+        dest_set = set(standard_capsule_destinations)
+
+        # 2. Nếu có danh sách map từ server qua cmd -91, bổ sung thêm
+        if capsule_map_names:
+            for name in capsule_map_names:
+                to_id = resolve_map_id(name, cgender=cgender)
+                if to_id is not None:
+                    dest_set.add(to_id)
+
+        for to_id in dest_set:
             if to_id != current_map:
                 if not any(step.to == to_id and step.type == TypeMapNext.Capsule for step in self.links[current_map]):
                     self.links[current_map].append(
-                        MapNext(current_map, to_id, TypeMapNext.Capsule, [select, capsule_item_id])
+                        MapNext(current_map, to_id, TypeMapNext.Capsule, [capsule_item_id])
                     )

@@ -144,7 +144,7 @@ MAP_NAMES: Dict[int, str] = {
     131: "Hành Tinh Yardart",
     132: "Hành Tinh Yardart 2",
     133: "Hành Tinh Yardart 3",
-    134: "Đại hội võ thuật Vũ Trụ 6-7",
+    134: "Đấu Trường Jiren",
     135: "Động hải tặc",
     136: "Hang Bạch Tuộc",
     137: "Động kho báu",
@@ -179,14 +179,14 @@ MAP_NAMES: Dict[int, str] = {
     166: "Hành tinh ngục tù",
     167: "Địa ngục tầng 1",
     168: "Địa ngục tầng 2",
-    169: "Khu vực luyện tập",
-    170: "Khu vực luyện tập",
-    171: "Khu vực luyện tập",
-    172: "Trạm tàu Hủy Diệt Trái Đất",
-    173: "Trạm tàu Hủy Diệt Namek",
-    174: "Trạm tàu Hủy Diệt Xayda",
-    175: "Thành phố Trái Đất",
-    176: "Thành phố Namếc",
+    169: "Địa ngục tầng 3",
+    170: "Cổng địa ngục",
+    171: "Đảo heo",
+    172: "Đảo khỉ",
+    173: "Vườn táo",
+    174: "Vườn nho",
+    175: "Vườn hoa",
+    176: "Rừng cấm",
     177: "Thành Phố Xayda",
     178: "Thành Phố Cold",
     179: "Vùng đất 01",
@@ -194,6 +194,9 @@ MAP_NAMES: Dict[int, str] = {
     181: "Vùng đất 02",
     182: "Map chiến trường",
     183: "Cánh đồng chiến thắng",
+    198: "Làng Vamchar",
+    199: "Vũ Trụ Số 9",
+    206: "Địa Ngục",
     213: "Thánh địa Kakarot",
 }
 
@@ -251,8 +254,9 @@ def resolve_map_id(query: Union[int, str], cgender: int = 0) -> Optional[int]:
 
     norm = normalize_str(raw)
 
-    # 1. Alias Nhà
-    if norm in ("nha", "home", "ve nha", "ve nha gohan", "ve nha moori", "ve nha broly"):
+    # 1. Alias Nhà (tự động theo hành tinh cgender: 0->Gohan, 1->Moori, 2->Broly)
+    if norm in ("nha", "home", "ve nha", "ve nha gohan", "ve nha moori", "ve nha broly",
+                "moori house", "gohan house", "broly house", "house", "nha gohan", "nha moori", "nha broly"):
         return 21 + cgender
 
     # 2. Alias Làng
@@ -278,6 +282,25 @@ def resolve_map_id(query: Union[int, str], cgender: int = 0) -> Optional[int]:
     # 7. Alias Nhà Trunks / Tương lai
     if norm in ("tuong lai", "future", "nha trunks"):
         return 102
+
+    # 8. Alias các map mới của TDStudio
+    if norm in ("dia nguc", "hell"):
+        return 206
+
+    if norm in ("vu tru so 9", "vu tru 9", "universe 9"):
+        return 199
+
+    if norm in ("lang vamchar", "vamchar"):
+        return 198
+
+    if norm in ("dau truong jiren", "jiren"):
+        return 134
+
+    if norm in ("hanh tinh nguc tu", "nguc tu"):
+        return 155
+
+    if norm in ("hanh tinh bill", "bill", "beerus"):
+        return 154
 
     # Tìm kiếm chính xác tên chuẩn (không dấu)
     for mid, name in MAP_NAMES.items():

@@ -211,16 +211,22 @@ class XmapController:
 
                     # Nạp liên kết bay nhanh từ Capsule nếu người chơi có Capsule trong Balo
                     # (bỏ qua nếu capsule_broken: panel server không mở được)
-                    # Bỏ sử dụng Capsule theo yêu cầu (chỉ đi bộ)
                     capsule_id = None
+                    if not self.capsule_broken:
+                        if self.can_use_capsule_vip():
+                            capsule_id = 194
+                        elif self.can_use_capsule_normal():
+                            capsule_id = 193
 
                     if capsule_id is not None:
                         caps_names = getattr(self.client.controller, "capsule_map_names", None)
+                        map_cap_return = getattr(self.client.controller, "map_capsule_return", -1)
                         self.xmap_data.load_link_map_capsule(
                             current_map=curr_map,
                             cgender=cgender,
                             capsule_map_names=caps_names if caps_names else None,
                             capsule_item_id=capsule_id,
+                            map_capsule_return=map_cap_return,
                         )
 
                     self.way = XmapAlgorithm.find_way(self.xmap_data, curr_map, self.map_end)

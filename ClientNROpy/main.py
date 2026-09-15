@@ -599,16 +599,19 @@ def interactive_cli(client: ClientNRO):
 
         elif cmd in ("captest", "capsule", "testcap"):
             ctrl = client.controller
-            print(f"[*] Panel capsule TRƯỚC test: {len(ctrl.capsule_map_names)} mục")
-            print("[*] Bật sniff gói tin 8s + gửi useItem capsule ĐB (194)...")
-            ctrl.debug = True
-            client.service.useItem(0, 1, -1, 194)
-            time.sleep(8.0)
-            ctrl.debug = False
-            names = list(ctrl.capsule_map_names)
-            print(f"[*] Panel capsule SAU test: {len(names)} mục")
-            for i, nm in enumerate(names[:40]):
-                print(f"    [{i}] {nm}")
+            vip_item = next((it for it in client.myChar.arrItemBag if it is not None and it.template_id in (194, 193)), None)
+            if not vip_item:
+                print("[-] Không tìm thấy Capsule (194 hoặc 193) trong balo!")
+            else:
+                print(f"[*] Panel capsule TRƯỚC test: {len(ctrl.capsule_map_names)} mục")
+                print(f"[*] Gửi useItem cho Capsule (slot {vip_item.index_ui}, ID {vip_item.template_id})...")
+                client.service.useItem(0, 1, vip_item.index_ui, -1)
+                time.sleep(1.5)
+                names = list(ctrl.capsule_map_names)
+                planets = list(ctrl.capsule_planet_names)
+                print(f"[*] Panel capsule SAU test: {len(names)} mục")
+                for i, (nm, pl) in enumerate(zip(names[:40], planets[:40])):
+                    print(f"    [{i:02d}] {nm:<25} | {pl}")
 
         elif cmd in ("npcs", "npc"):
             npcs = client.myChar.mapInfo.npcs

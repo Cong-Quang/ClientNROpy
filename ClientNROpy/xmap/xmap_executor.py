@@ -315,13 +315,112 @@ class XmapExecutor:
                 if on_npc_menu in client.controller.on_npc_menu_callbacks:
                     client.controller.on_npc_menu_callbacks.remove(on_npc_menu)
 
-        # 4. Chuyển map qua Capsule
+        # 4. Chuyển map qua Capsule (khớp tên địa điểm động theo cmd -91)
         elif next_type == TypeMapNext.Capsule:
-            if not map_next.info: return False
-            client.controller.map_capsule_return = client.myChar.mapInfo.mapID
-            select = int(map_next.info[0])
-            client.service.requestMapSelect(select)
-            return True
+            capsule_tpl = map_next.info[0] if map_next.info else 194
+            
+            # Tìm vật phẩm capsule trong balo
+            cap_item = None
+            for it in client.myChar.arrItemBag:
+                if it is not None and it.template_id == capsule_tpl:
+                    cap_item = it
+                    break
+            
+            # Nếu không tìm thấy đúng loại, thử tìm loại capsule khác (194 hoặc 193)
+            if not cap_item:
+                for it in client.myChar.arrItemBag:
+                    if it is not None and it.template_id in (194, 193):
+                        cap_item = it
+                        break
+            
+            if not cap_item:
+                print(f"[Xmap] [Capsule] Không tìm thấy Capsule trong hành trang!")
+                return False
+
+            import threading
+            capsule_event = threading.Event()
+            received_maps = []
+            received_planets = []
+
+            def on_capsule_list(maps, planets):
+                received_maps.clear()
+                received_maps.extend(maps)
+                received_planets.clear()
+                received_planets.extend(planets)
+                capsule_event.set()
+
+            client.controller.on_capsule_maps_callbacks.append(on_capsule_list)
+            try:
+                capsule_event.clear()
+                # Sử dụng item theo index_ui trong balo
+                client.service.useItem(0, 1, cap_item.index_ui, -1)
+
+                if not capsule_event.wait(timeout=3.0):
+                    print(f"[Xmap] [Capsule] Quá thời gian chờ phản hồi danh sách map (cmd -91) từ server!")
+                    return False
+
+                target_id = map_next.to
+                cgender = client.myChar.cgender
+                target_name = get_map_name(target_id)
+                target_norm = normalize_str(target_name)
+
+                matched_idx = -1
+
+                # 1. Đích đến là Nhà của hành tinh (0: Gohan House - 21, 1: Moori House - 22, 2: Broly House - 23)
+                if target_id in (21, 22, 23) or target_id == (21 + cgender):
+                    house_kws = ["gohan house", "moori house", "broly house", "house", "nha", "ve nha"]
+                    for i, opt in enumerate(received_maps):
+                        opt_norm = normalize_str(opt)
+                        if any(kw in opt_norm for kw in house_kws):
+                            matched_idx = i
+                            break
+                    if matched_idx == -1 and len(received_maps) > 0:
+                        matched_idx = 0  # Ô đầu tiên luôn là nhà của nhân vật
+
+                # 2. Đích đến là Trạm tàu vũ trụ (24, 25, 26)
+                elif target_id in (24, 25, 26) or target_id == (24 + cgender):
+                    ttvt_kws = ["tram tau vu tru", "tram tau", "spaceship station", "station"]
+                    for i, opt in enumerate(received_maps):
+                        opt_norm = normalize_str(opt)
+                        if any(kw in opt_norm for kw in ttvt_kws):
+                            matched_idx = i
+                            break
+
+                # 3. Khớp tên bản đồ chính xác tuyệt đối (đã chuẩn hoá không dấu)
+                if matched_idx == -1:
+                    for i, opt in enumerate(received_maps):
+                        if normalize_str(opt) == target_norm:
+                            matched_idx = i
+                            break
+
+                # 4. Khớp qua resolve_map_id()
+                if matched_idx == -1:
+                    for i, opt in enumerate(received_maps):
+                        if resolve_map_id(opt, cgender=cgender) == target_id:
+                            matched_idx = i
+                            break
+
+                # 5. Khớp chuỗi con tương đồng (target_norm in opt_norm hoặc ngược lại)
+                if matched_idx == -1:
+                    for i, opt in enumerate(received_maps):
+                        opt_norm = normalize_str(opt)
+                        if target_norm in opt_norm or opt_norm in target_norm:
+                            matched_idx = i
+                            break
+
+                if matched_idx == -1:
+                    print(f"[Xmap] [Capsule] Không tìm thấy '{target_name}' (ID {target_id}) trong danh sách options của server!")
+                    print(f"       Danh sách hiện có ({len(received_maps)}): {received_maps}")
+                    return False
+
+                selected_name = received_maps[matched_idx]
+                print(f"[Xmap] [Capsule] Chọn ô [{matched_idx:02d}] '{selected_name}' -> '{target_name}' (ID {target_id})...")
+                client.controller.map_capsule_return = client.myChar.mapInfo.mapID
+                client.service.requestMapSelect(matched_idx)
+                return True
+            finally:
+                if on_capsule_list in client.controller.on_capsule_maps_callbacks:
+                    client.controller.on_capsule_maps_callbacks.remove(on_capsule_list)
 
         # 5. Chuyển map bằng toạ độ (Position)
         elif next_type == TypeMapNext.Position:
