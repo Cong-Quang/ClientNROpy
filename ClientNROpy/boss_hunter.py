@@ -409,7 +409,7 @@ class BossHunter:
             self.status_message = "Nhân vật đã bị Boss hạ gục! Đang tự động hồi sinh về thành..."
             if self.client and hasattr(self.client, "service"):
                 self.client.service.returnTownFromDead()
-            time.sleep(1.0)
+            time.sleep(0.2)
             return
 
         # 2. Đã hồi sinh sống lại

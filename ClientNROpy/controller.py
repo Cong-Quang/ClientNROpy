@@ -596,6 +596,7 @@ class Controller(IMessageHandler):
                     pass
 
                 print(f"[Controller] Map loaded: {char.mapInfo}")
+                Service.gI().finishLoadMap()
                 for cb in self.on_map_info_callbacks:
                     cb(char.mapInfo)
                 return

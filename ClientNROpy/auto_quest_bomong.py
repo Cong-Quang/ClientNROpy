@@ -279,7 +279,7 @@ class AutoQuest:
                             return False
                         # Đứng lệch sang trái NPC 1 chút để không đè lên NPC
                         cm.teleport(int(npc["x"]) - 10, int(npc["y"]))
-                        time.sleep(1.0)
+                        time.sleep(0.2)
                         ch = self._my_char()
                         dist2 = math.hypot(npc["x"] - ch.cx, npc["y"] - ch.cy)
                         if dist2 > NPC_INTERACT_DISTANCE:
@@ -313,7 +313,7 @@ class AutoQuest:
         ok = self._interact_with_npc_menu(BO_MONG_NPC_TEMPLATE_ID, [1])
         if ok:
             print(f"[AutoQuest][{self._tag()}] Đã query NPC refresh quest info.")
-        time.sleep(1.0)
+        time.sleep(0.2)
         return ok
 
     # ------------------------------------------------------------------
@@ -345,11 +345,11 @@ class AutoQuest:
                 self._service().returnTownFromDead()
             except Exception:
                 pass
-            time.sleep(1.0)
+            time.sleep(0.2)
             for _ in range(10):
                 if not self._is_dead():
                     break
-                time.sleep(1.0)
+                time.sleep(0.2)
             if self._is_dead():
                 return
             print(f"[AutoQuest][{self._tag()}] Đã hồi sinh. Quay lại làm nhiệm vụ...")

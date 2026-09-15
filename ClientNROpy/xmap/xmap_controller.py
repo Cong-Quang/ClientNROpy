@@ -202,13 +202,8 @@ class XmapController:
 
                     # Nạp liên kết bay nhanh từ Capsule nếu người chơi có Capsule trong Balo
                     # (bỏ qua nếu capsule_broken: panel server không mở được)
+                    # Bỏ sử dụng Capsule theo yêu cầu (chỉ đi bộ)
                     capsule_id = None
-                    if not self.capsule_broken and self.can_use_capsule_vip():
-                        capsule_id = 194
-                        self._log("Sử dụng Capsule Đặc Biệt trong Balo để bay nhanh!")
-                    elif not self.capsule_broken and self.can_use_capsule_normal():
-                        capsule_id = 193
-                        self._log("Sử dụng Capsule Thường trong Balo để bay nhanh!")
 
                     if capsule_id is not None:
                         caps_names = getattr(self.client.controller, "capsule_map_names", None)
@@ -267,7 +262,7 @@ class XmapController:
                         if time.time() - self._last_fail_log >= 8.0:
                             self._last_fail_log = time.time()
                             self._log(f"Không thể thực hiện bước chuyển map sang ID {step.to}! Đang thử lại...")
-                        time.sleep(1.0)
+                        time.sleep(0.2)
                         continue
 
                     # Chờ máy chủ phản hồi gói tin chuyển map
@@ -307,4 +302,4 @@ class XmapController:
 
             except Exception as ex:
                 self._log(f"Lỗi ngoại lệ trong vòng lặp Xmap: {ex}")
-                time.sleep(1.0)
+                time.sleep(0.2)

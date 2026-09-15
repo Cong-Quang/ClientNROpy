@@ -511,7 +511,7 @@ class CombatManager:
                 print(f"[Combat] Hồi sinh về thành [nguồn: Tàn sát] "
                       f"(HP={my_char.cHP}/{my_char.cHPFull}, status={getattr(my_char, 'statusMe', '?')})")
                 self.service.returnTownFromDead()
-                time.sleep(1.0)
+                time.sleep(0.2)
             return
 
         # 2. Tự động dùng đậu thần khi HP hoặc KI thấp

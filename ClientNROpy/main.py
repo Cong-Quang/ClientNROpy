@@ -188,7 +188,7 @@ def print_map_and_zones(map_info: MapInfo):
             print(f"  - {wp.name}: ({wp.minX},{wp.minY}) -> ({wp.maxX},{wp.maxY})")
 
 
-def run_client(host="51.79.163.109", port=12457, username="poopooi01", password="02082003", version="2.1.4"):
+def run_client(host="51.79.163.109", port=12457, username="poopooi02", password="02082003", version="2.1.4"):
     print_banner()
     print(f"[*] Kết nối tới máy chủ: {host}:{port} (phiên bản {version})")
     print(f"[*] Đăng nhập tài khoản: '{username}'")
@@ -224,7 +224,7 @@ def run_client(host="51.79.163.109", port=12457, username="poopooi01", password=
 
     # Bắt đầu kết nối
     client.connect()
-    time.sleep(1.0)
+    time.sleep(0.2)
 
     # Đăng nhập
     client.login(username, password, version=version)
@@ -464,6 +464,26 @@ def interactive_cli(client: ClientNRO):
             elif args[0].lower() in ("clear", "reset"):
                 client.boss_manager.clear()
                 print("[*] Đã xóa toàn bộ lịch sử Boss!")
+
+            # Alias cho Auto Săn Boss (giống lệnh hunt)
+            elif args[0].lower() in ("on", "start", "1", "true"):
+                client.start_auto_hunt()
+                print("[*] Auto Săn Boss: BẬT!")
+                
+            elif args[0].lower() in ("off", "stop", "0", "false"):
+                client.stop_auto_hunt()
+                print("[*] Auto Săn Boss: TẮT!")
+                
+            elif args[0].lower() in ("status", "st", "info"):
+                print_hunt_status(client)
+                
+            elif args[0].lower() in ("target", "add"):
+                if len(args) > 1:
+                    boss_name = " ".join(args[1:])
+                    client.add_hunt_target(boss_name)
+                    print(f"[*] Đã thêm '{boss_name}' vào Whitelist săn Boss: {list(client.boss_hunter.target_bosses)}")
+                else:
+                    print("Cú pháp: boss target <tên boss> (Ví dụ: boss target Broly)")
 
             else:
                 # Nếu gõ trực tiếp STT hoặc tên boss (vd: 'boss 1' hoặc 'boss broly')
@@ -758,7 +778,7 @@ if __name__ == "__main__":
     # Đọc cấu hình kết nối
     host = "51.79.163.109"
     port = 12457
-    user = "poopooi01"
+    user = "poopooi02"
     pwd = "02082003"
     ver = "2.1.4"
     auto_xmap_target = None
@@ -799,5 +819,5 @@ if __name__ == "__main__":
     if not no_cli:
         interactive_cli(client)
     else:
-        time.sleep(1.0)
+        time.sleep(0.2)
         client.disconnect()
