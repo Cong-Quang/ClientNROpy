@@ -631,9 +631,18 @@ def interactive_cli(client: ClientNRO):
                 elif sub in ("clear", "clrm", "reset"):
                     client.combat_manager.clear_mob_targets()
                     print("[*] Đã xoá bộ lọc quái (đang tàn sát toàn bộ quái trong map)!")
+                elif sub == "skill":
+                    if len(args) > 1 and args[1].isdigit():
+                        skill_id = int(args[1])
+                        client.combat_manager.tansat_skill_id = skill_id
+                        print(f"[*] Đã cấu hình skill tàn sát cố định thành Template ID {skill_id}!")
+                    elif len(args) > 1 and args[1].lower() in ("clear", "none", "off"):
+                        client.combat_manager.tansat_skill_id = None
+                        print("[*] Đã huỷ cấu hình skill tàn sát (sẽ tự lấy skill đang chọn hiện tại).")
+                    else:
+                        print("Cú pháp: ts skill <id> (VD: ts skill 9) hoặc ts skill clear")
                 else:
-                    print(f"Không rõ tham số '{sub}'. Cú pháp: ts [on|off|mob|pk|all|type <id>|id <id>|clear]")
-
+                    print(f"Không rõ tham số '{sub}'. Cú pháp: ts [on|off|mob|pk|all|type <id>|id <id>|skill <id>|clear]")
         elif cmd == "nsq":
             client.combat_manager.avoid_super_mob = not client.combat_manager.avoid_super_mob
             print(f"[*] Né siêu quái (nsq): {'BẬT' if client.combat_manager.avoid_super_mob else 'TẮT'}!")
@@ -749,7 +758,7 @@ if __name__ == "__main__":
     # Đọc cấu hình kết nối
     host = "51.79.163.109"
     port = 12457
-    user = "poopooi02"
+    user = "poopooi01"
     pwd = "02082003"
     ver = "2.1.4"
     auto_xmap_target = None

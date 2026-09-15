@@ -107,6 +107,26 @@ class Controller(IMessageHandler):
                     item.addOption(opt_id, param)
         return item
 
+    def _handle_npc_menu(self, msg: Message) -> None:
+        """Xử lý thông tin menu NPC (cmd 32, OpenMenu trong C#)."""
+        try:
+            t_id = msg.reader().readShort()
+            text = msg.reader().readUTF()
+            size = msg.reader().readByte()
+            options = []
+            for _ in range(size):
+                options.append(msg.reader().readUTF())
+            
+            print(f"[Controller] Nhận menu từ NPC {t_id}: {options}")
+            
+            for cb in self.on_npc_menu_callbacks:
+                try:
+                    cb(t_id, text, options)
+                except Exception as ex:
+                    print(f"[Controller] on_npc_menu callback error: {ex}")
+        except Exception as ex:
+            print(f"[Controller] _handle_npc_menu error: {ex}")
+
     def onMessage(self, msg: Message) -> None:
         cmd = msg.command
         if self.debug:

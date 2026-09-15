@@ -47,6 +47,7 @@ class MapInfo:
         return None
 
     def __repr__(self) -> str:
+        npc_ids = [npc.get("template_id") for npc in self.npcs]
         return (f"<Map: {self.mapName} (ID: {self.mapID}, Khu: {self.zoneID}) | "
                 f"Quái: {len(self.mobs)}, Người chơi: {len(self.chars)}, "
-                f"Vật phẩm: {len(self.items)}, NPC: {len(self.npcs)}, Tổng số khu: {len(self.zones)}>")
+                f"Vật phẩm: {len(self.items)}, NPC: {len(self.npcs)} {npc_ids}, Tổng số khu: {len(self.zones)}>")

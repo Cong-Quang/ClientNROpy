@@ -5,7 +5,7 @@ mô phỏng XmapObjects.cs trong Dragonboy C#.
 """
 
 from enum import IntEnum
-from typing import List, Optional
+from typing import List, Optional, Union
 
 
 class TypeMapNext(IntEnum):
@@ -21,11 +21,11 @@ class TypeMapNext(IntEnum):
 class MapNext:
     """Đại diện cho 1 bước chuyển tiếp giữa hai map liền kề trên đồ thị."""
 
-    def __init__(self, map_start: int, to: int, type: TypeMapNext, info: Optional[List[int]] = None):
+    def __init__(self, map_start: int, to: int, type: TypeMapNext, info: Optional[List[Union[int, str]]] = None):
         self.map_start: int = map_start
         self.to: int = to
         self.type: TypeMapNext = type
-        self.info: List[int] = info if info is not None else []
+        self.info: List[Union[int, str]] = info if info is not None else []
 
     def __repr__(self) -> str:
         return f"<MapNext {self.map_start} -> {self.to} ({self.type.name}, info={self.info})>"

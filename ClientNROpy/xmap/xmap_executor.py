@@ -30,6 +30,18 @@ class XmapExecutor:
         target_name = get_map_name(target_map_id)
         target_norm = normalize_str(target_name)
 
+        # 0. Hỗ trợ tên cổng đặc biệt của server lậu (tránh sai lệch so với MAP_NAMES chuẩn)
+        CUSTOM_WAYPOINT_NAMES = {
+            18: "rung thong xayda",
+            35: "rung nguyen sinh",
+            20: "vach nui den",
+            17: "rung da",
+            77: "thung lung den",
+            47: "rung karin",
+        }
+        if target_map_id in CUSTOM_WAYPOINT_NAMES:
+            target_norm = CUSTOM_WAYPOINT_NAMES[target_map_id]
+
         # 1. So khớp chính xác theo tên chuẩn hoá
         for wp in map_info.waypoints:
             wp_norm = normalize_str(wp.name)
@@ -108,11 +120,30 @@ class XmapExecutor:
             elif wp.minX > 1500:  # Gần biên phải
                 cx = wp.minX + 15
 
-            # Đứng sát cổng (tele kiểu combat + chờ đồng bộ) rồi mới xin qua map
-            try:
-                client.teleport(cx, cy)
-            except Exception:
-                client.service.charMove(cx, cy)
+            dist = math.hypot(cx - client.myChar.cx, cy - client.myChar.cy)
+            print(f"[Xmap] [AutoWaypoint] Cổng ở ({cx}, {cy}), myChar ở ({client.myChar.cx}, {client.myChar.cy}). Khoảng cách: {dist:.0f}px")
+            if dist <= 20:
+                print(f"[Xmap] [AutoWaypoint] Đã ở sát cổng (Cách {dist:.0f}px <= 20). Bỏ qua đi bộ.")
+            else:
+                print(f"[Xmap] Đi bộ tới cổng từ ({client.myChar.cx}, {client.myChar.cy}) đến ({cx}, {cy}) (Cách {dist:.0f}px)")
+                
+            steps = 0
+            while dist > 20:
+                dx = cx - client.myChar.cx
+                dy = cy - client.myChar.cy
+                step_x = 60 if dx > 60 else (-60 if dx < -60 else dx)
+                step_y = 60 if dy > 60 else (-60 if dy < -60 else dy)
+                client.myChar.cx += int(step_x)
+                client.myChar.cy += int(step_y)
+                try:
+                    client.service.charMove(client.myChar.cx, client.myChar.cy)
+                except Exception as ex:
+                    print(f"[Xmap] charMove exception: {ex}")
+                time.sleep(0.05)
+                dist = math.hypot(cx - client.myChar.cx, cy - client.myChar.cy)
+                steps += 1
+                
+            print(f"[Xmap] Đã đi {steps} bước tới cổng (Còn {dist:.0f}px). Gửi yêu cầu qua map...")
             time.sleep(0.1)
 
             # Gửi yêu cầu qua map
@@ -126,35 +157,133 @@ class XmapExecutor:
         elif next_type == TypeMapNext.NpcMenu:
             if not map_next.info:
                 return False
-            npc_id = map_next.info[0]
+            npc_id = int(map_next.info[0])
             # Cơ chế game: phải đứng gần NPC mới mở được menu
             if not XmapExecutor.teleport_near_npc(client, npc_id):
                 return False
-            # Mở menu NPC
-            client.service.openMenu(npc_id)
-            time.sleep(0.15)
-            # Chọn các dòng tuỳ chọn liên tiếp
-            for select in map_next.info[1:]:
-                client.service.confirmMenu(npc_id, select)
-                time.sleep(0.1)
-            return True
+            
+            import threading
+            menu_event = threading.Event()
+            received_options = []
+            
+            def on_npc_menu(t_id, text, options):
+                if t_id == npc_id:
+                    received_options.clear()
+                    received_options.extend(options)
+                    menu_event.set()
+
+            client.controller.on_npc_menu_callbacks.append(on_npc_menu)
+            try:
+                # Mở menu NPC
+                menu_event.clear()
+                client.service.openMenu(npc_id)
+                
+                # Chọn các dòng tuỳ chọn liên tiếp
+                for select in map_next.info[1:]:
+                    if not menu_event.wait(timeout=3.0):
+                        print(f"[Xmap] Timeout waiting for NPC {npc_id} menu")
+                        return False
+                    
+                    actual_select = select
+                    if isinstance(select, str):
+                        matched_idx = -1
+                        norm_select = normalize_str(select)
+                        for i, opt in enumerate(received_options):
+                            if norm_select in normalize_str(opt):
+                                matched_idx = i
+                                break
+                        if matched_idx == -1:
+                            print(f"[Xmap] Cannot find option '{select}' in NPC {npc_id} menu: {received_options}")
+                            return False
+                        actual_select = matched_idx
+                        
+                    menu_event.clear()
+                    client.service.confirmMenu(npc_id, int(actual_select))
+                return True
+            finally:
+                if on_npc_menu in client.controller.on_npc_menu_callbacks:
+                    client.controller.on_npc_menu_callbacks.remove(on_npc_menu)
 
         # 3. Chuyển map qua Bảng chọn map NPC (NpcPanel)
         elif next_type == TypeMapNext.NpcPanel:
             if len(map_next.info) < 3:
                 return False
-            npc_id = map_next.info[0]
+            npc_id = int(map_next.info[0])
             select_menu = map_next.info[1]
             select_panel = map_next.info[2]
+            
+            import threading
+            menu_event = threading.Event()
+            received_options = []
+            def on_npc_menu(t_id, text, options):
+                if t_id == npc_id:
+                    received_options.clear()
+                    received_options.extend(options)
+                    menu_event.set()
+
+            panel_event = threading.Event()
+            received_panel_maps = []
+            def on_capsule_maps(map_names, planet_names):
+                received_panel_maps.clear()
+                received_panel_maps.extend(map_names)
+                panel_event.set()
+
             # Cơ chế game: phải đứng gần NPC mới mở được menu
             if not XmapExecutor.teleport_near_npc(client, npc_id):
                 return False
-            client.service.openMenu(npc_id)
-            time.sleep(0.15)
-            client.service.confirmMenu(npc_id, select_menu)
-            time.sleep(0.1)
-            client.service.requestMapSelect(select_panel)
-            return True
+                
+            client.controller.on_npc_menu_callbacks.append(on_npc_menu)
+            client.controller.on_capsule_maps_callbacks.append(on_capsule_maps)
+            try:
+                # 1. Open Menu and find select_menu
+                menu_event.clear()
+                client.service.openMenu(npc_id)
+                
+                if not menu_event.wait(timeout=3.0):
+                    print(f"[Xmap] Timeout waiting for NPC {npc_id} menu (NpcPanel)")
+                    return False
+                
+                actual_select = select_menu
+                if isinstance(select_menu, str):
+                    matched_idx = -1
+                    norm_select = normalize_str(select_menu)
+                    for i, opt in enumerate(received_options):
+                        if norm_select in normalize_str(opt):
+                            matched_idx = i
+                            break
+                    if matched_idx == -1:
+                        print(f"[Xmap] Cannot find option '{select_menu}' in NPC {npc_id} menu: {received_options}")
+                        return False
+                    actual_select = matched_idx
+                
+                # 2. Confirm Menu and wait for panel
+                panel_event.clear()
+                client.service.confirmMenu(npc_id, int(actual_select))
+                
+                if not panel_event.wait(timeout=3.0):
+                    print(f"[Xmap] Timeout waiting for Panel maps (cmd -91) from NPC {npc_id}")
+                    return False
+                
+                actual_panel = select_panel
+                if isinstance(select_panel, str):
+                    matched_idx = -1
+                    norm_panel = normalize_str(select_panel)
+                    for i, m_name in enumerate(received_panel_maps):
+                        if norm_panel in normalize_str(m_name):
+                            matched_idx = i
+                            break
+                    if matched_idx == -1:
+                        print(f"[Xmap] Cannot find panel '{select_panel}' in capsule maps: {received_panel_maps}")
+                        return False
+                    actual_panel = matched_idx
+                    
+                client.service.requestMapSelect(int(actual_panel))
+                return True
+            finally:
+                if on_npc_menu in client.controller.on_npc_menu_callbacks:
+                    client.controller.on_npc_menu_callbacks.remove(on_npc_menu)
+                if on_capsule_maps in client.controller.on_capsule_maps_callbacks:
+                    client.controller.on_capsule_maps_callbacks.remove(on_capsule_maps)
 
         # 4. Nhảy toạ độ Position (Thần điện -> Tháp Karin, Tháp Karin -> Chân tháp)
         elif next_type == TypeMapNext.Position:
@@ -213,15 +342,14 @@ class XmapExecutor:
         return False
 
     # Khoảng cách tối đa để mở menu NPC (server check ~60px)
-    NPC_INTERACT_DISTANCE = 55
+    # Khoảng cách tối đa để tương tác NPC (server check anti-cheat)
+    NPC_INTERACT_DISTANCE = 20
 
     @staticmethod
     def teleport_near_npc(client: "ClientNRO", npc_template_id: int) -> bool:
-        """Tele tới sát NPC rồi mới cho mở menu (cơ chế game).
+        """Đi tới sát NPC rồi mới cho mở menu (cơ chế game).
 
-        Trả về True khi đã đứng trong tầm (hoặc không rõ tọa độ NPC thì
-        vẫn cho thử kiểu cũ). False khi tele xong mà vẫn đứng xa -> Xmap
-        retry thay vì spam gói menu bị server lờ.
+        Chia nhỏ quãng đường (mỗi bước <= 60px) để server không coi là hack speed/teleport.
         """
         try:
             my_char = client.myChar
@@ -230,18 +358,44 @@ class XmapExecutor:
             npc = find(npc_template_id) if callable(find) else None
             if npc is None:
                 return True
-            dist = math.hypot(npc["x"] - my_char.cx, npc["y"] - my_char.cy)
+                
+            target_x = int(npc["x"]) - 10
+            target_y = int(npc["y"])
+            dist = math.hypot(target_x - my_char.cx, target_y - my_char.cy)
+            
+            print(f"[Xmap] [teleport_near_npc] NPC {npc_template_id} ở ({target_x}, {target_y}), myChar ở ({my_char.cx}, {my_char.cy}). Khoảng cách: {dist:.0f}px")
+            
             if dist <= XmapExecutor.NPC_INTERACT_DISTANCE:
+                print(f"[Xmap] [teleport_near_npc] Đã ở gần NPC {npc_template_id} (Cách {dist:.0f}px <= {XmapExecutor.NPC_INTERACT_DISTANCE}). Bỏ qua đi bộ.")
                 return True
-            ok = client.teleport(int(npc["x"]) - 10, int(npc["y"]))
+                
+            print(f"[Xmap] Đi bộ tới NPC {npc_template_id} từ ({my_char.cx}, {my_char.cy}) đến ({target_x}, {target_y}) (Cách {dist:.0f}px)")
+            
+            # Đi bộ dần tới NPC (bước 60px)
+            steps = 0
+            while dist > XmapExecutor.NPC_INTERACT_DISTANCE:
+                dx = target_x - my_char.cx
+                dy = target_y - my_char.cy
+                
+                step_x = 60 if dx > 60 else (-60 if dx < -60 else dx)
+                step_y = 60 if dy > 60 else (-60 if dy < -60 else dy)
+                
+                my_char.cx += int(step_x)
+                my_char.cy += int(step_y)
+                
+                try:
+                    client.service.charMove(my_char.cx, my_char.cy)
+                except Exception as ex:
+                    print(f"[Xmap] charMove exception: {ex}")
+                    
+                time.sleep(0.05)
+                dist = math.hypot(target_x - my_char.cx, target_y - my_char.cy)
+                steps += 1
+                
+            print(f"[Xmap] Đã đi {steps} bước tới sát NPC {npc_template_id} (Còn {dist:.0f}px). Gửi openMenu...")
+                
             time.sleep(0.5)
-            my_char = client.myChar
-            dist2 = math.hypot(npc["x"] - my_char.cx, npc["y"] - my_char.cy)
-            if dist2 <= XmapExecutor.NPC_INTERACT_DISTANCE:
-                return True
-            print(f"[Xmap] NPC {npc_template_id} vẫn xa ({dist2:.0f}px) sau tele "
-                  f"(gửi {'thành công' if ok else 'thất bại'}). Thử lại...")
-            return False
+            return True
         except Exception as ex:
             print(f"[Xmap] Lỗi tele tới NPC {npc_template_id}: {ex}")
             return True

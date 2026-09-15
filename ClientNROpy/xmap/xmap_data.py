@@ -12,61 +12,61 @@ from .map_data import GROUP_MAPS_DEF
 # Dữ liệu liên kết thủ công mô phỏng TextData/LinkMapsXmap.bytes
 RAW_LINK_MAPS_XMAP = """
 # Trái Đất - Namec
-24 25 1 10 0
-25 24 1 11 0
+24 25 1 10 namec
+25 24 1 11 trái_đất
 
 # Trái Đất - Xayda
-24 26 1 10 1
-26 24 1 12 0
+24 26 1 10 xayda
+26 24 1 12 trái_đất
 
 # Namec - Xayda
-25 26 1 11 1
-26 25 1 12 1
+25 26 1 11 xayda
+26 25 1 12 namec
 
 # Hành tinh -> Siêu thị
-24 84 1 10 2
-25 84 1 11 2
-26 84 1 12 2
+24 84 1 10 siêu_thị
+25 84 1 11 siêu_thị
+26 84 1 12 siêu_thị
 
 # Tpvgt - Nappa
-19 68 1 12 1
-68 19 1 12 0
+19 68 1 12 nappa
+68 19 1 12 tàu_vũ_trụ
 
 # Nappa -> Yadat
-80 131 1 60 0
-131 80 1 60 1
+80 131 1 60 yadrat
+131 80 1 60 núi_khỉ_vàng
 
 # Trái Đất - Tương lai
-27 102 1 38 1
-28 102 1 38 1
-29 102 1 38 1
-102 24 1 38 1
+27 102 1 38 tương_lai
+28 102 1 38 tương_lai
+29 102 1 38 tương_lai
+102 24 1 38 tàu_vũ_trụ
 
 # Thành phố Vegeta - Thành phố Santa
-19 126 1 53 0
-126 19 1 53 0
+19 126 1 53 santa
+126 19 1 53 tp_vegeta
 
 # Trái Đất - Hành tinh Potaufeu
-24 139 1 63 0
-139 24 1 63 0
+24 139 1 63 potaufeu
+139 24 1 63 trái_đất
 
 # Hành tinh Potaufeu - các hành tinh còn lại
-139 25 1 63 1
-139 26 1 63 2
+139 25 1 63 namec
+139 26 1 63 xayda
 
 # Rừng Bamboo - Tường thành 1
-27 53 1 25 0
+27 53 1 25 tường_thành
 
 # Thần điện - Hành tinh Kaio
-45 48 1 19 3
-48 45 1 20 3 0
+45 48 1 19 kaio
+48 45 1 20 thần_điện
 
 # Thánh địa Kaio - Hành tinh Kaio
 50 48 1 44 0
-48 50 1 20 3 1
+48 50 1 20 3 thánh_địa
 
 # Trái Đất - Khí Gas
-0 149 1 67 3 0
+0 149 1 67 khí_gas
 
 # Nhảy toạ độ Thần điện -> Tháp Karin -> Chân tháp
 45 46 3 576 552
@@ -91,10 +91,9 @@ RAW_AUTO_LINK_MAPS_WAYPOINT = """
 13 33
 
 # Xayda
-52 44 14 15 16 17 18 20 19
-17 35 36 37 38
+52 44 14 15 16 35 17 18 20 19
+20 77
 16 26
-20 37
 
 # Nappa
 68 69 70 71 72 64 65 63 66 67 73 74 75 76 77 81 82 83 79 80
@@ -165,7 +164,12 @@ class XmapData:
             line = line.strip()
             if not line or line.startswith("#"):
                 continue
-            parts = [int(p) for p in line.split()]
+            parts = []
+            for p in line.split():
+                if p.lstrip("-").isdigit():
+                    parts.append(int(p))
+                else:
+                    parts.append(p.replace("_", " "))
             if len(parts) < 3:
                 continue
             map_start = parts[0]

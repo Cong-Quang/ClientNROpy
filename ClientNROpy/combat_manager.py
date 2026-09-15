@@ -452,35 +452,26 @@ class CombatManager:
         return self.TANSAT_SKILLS_BY_GENDER.get(gender, (0, 2, 4))
 
     def _pick_tansat_skill(self) -> Optional[int]:
-        """Chọn 1 skill templateId khả dụng, xoay vòng để dùng cả 3 skill.
+        """Chọn skill để tàn sát (ts).
 
-        - Ưu tiên skill đặc biệt/chưởng khi hết cooldown, fallback về đấm.
-        - Lọc theo char.skills nếu client đã đồng bộ (tránh chọn skill chưa học).
-        - Xoay vòng (_tansat_skill_idx) nên không bao giờ kẹt ở 1 skill.
+        - Ưu tiên 1: tansat_skill_id do user cấu hình qua lệnh 'ts skill <id>'.
+        - Ưu tiên 2: skill đang chọn hiện tại của nhân vật (my_char.skillTemplateId).
+        - Ưu tiên 3: Fallback về skill đấm tuỳ theo hành tinh.
         """
+        if getattr(self, "tansat_skill_id", None) is not None:
+            return self.tansat_skill_id
+            
         my_char = self._get_my_char()
-        candidates = list(self._get_tansat_skill_ids())
-        if not candidates:
-            return None
-        owned = set(getattr(my_char, "skills", []) or []) if my_char else set()
-        # char.skills từ server là skillId; ở nhiều server nó trùng templateId
-        # với skill cấp 1 nên lọc mềm: nếu khớp được thì lọc, không thì giữ full.
-        filtered = [tid for tid in candidates if tid in owned]
-        pool = filtered if filtered else candidates
-        now = time.monotonic()
-        # Thử xoay vòng trong pool, ưu tiên skill hết cooldown
-        for offset in range(len(pool)):
-            idx = (self._tansat_skill_idx + offset) % len(pool)
-            tid = pool[idx]
-            cd = self.TANSAT_SKILL_COOLDOWN.get(tid, 1.0)
-            last = self._skill_last_use.get(tid, 0.0)
-            if now - last >= cd:
-                self._tansat_skill_idx = (idx + 1) % len(pool)
-                return tid
-        # Tất cả đang cooldown -> fallback về đấm (cuối pool) để không đứng yên
-        punch = pool[-1]
-        self._tansat_skill_idx = (self._tansat_skill_idx + 1) % len(pool)
-        return punch
+        if my_char:
+            current_skill = getattr(my_char, "skillTemplateId", 0)
+            if current_skill > 0:
+                return current_skill
+
+        # Fallback về skill đấm
+        candidates = self._get_tansat_skill_ids()
+        if candidates:
+            return candidates[-1] # index cuối là skill đấm (0, 2, 4)
+        return None
 
     def _select_and_attack(self, vMob: Optional[list] = None, vChar: Optional[list] = None) -> bool:
         """selectSkill theo hành tinh rồi mới sendPlayerAttack (fix TS chỉ xài 1 skill)."""
