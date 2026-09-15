@@ -5,7 +5,7 @@ Lớp điều khiển cấp cao (ClientNRO).
 thành một API dễ sử dụng cho các tool và bot game headless.
 """
 
-from typing import Optional, List, Callable, Union
+from typing import Optional, List, Callable, Union, Tuple
 from .session import Session_ME
 from .controller import Controller
 from .service import Service
@@ -17,6 +17,8 @@ from .zone_info import ZoneInfo
 from .map_info import MapInfo
 from .player_data import PlayerData
 from .chat_vip import ChatVip
+from .boss import Boss
+from .boss_manager import BossManager
 from .xmap import XmapController, MapNext
 
 
@@ -43,6 +45,10 @@ class ClientNRO:
 
         # Bộ điều khiển tìm đường tự động Xmap
         self.xmap_controller: XmapController = XmapController(self)
+
+        # Bộ quản lý và săn Boss (Mod/Boss.cs)
+        self.boss_manager: BossManager = BossManager(self)
+
 
     def connect(self, host: Optional[str] = None, port: Optional[int] = None) -> None:
         """Kết nối tới server game."""
@@ -247,3 +253,30 @@ class ClientNRO:
     def on_xmap_finish(self, callback: Callable[[bool, str], None]) -> None:
         """Lắng nghe sự kiện kết thúc Xmap (thành công hoặc thất bại)."""
         self.xmap_controller.on_finish_callbacks.append(callback)
+
+    # --------------------------------------------------------------------------
+    # Các hàm quản lý và săn Boss (Mô phỏng Mod/Boss.cs)
+    # --------------------------------------------------------------------------
+    def get_bosses(self) -> List[Boss]:
+        """Lấy toàn bộ danh sách Boss đã ghi nhận (tối đa 100)."""
+        return self.boss_manager.get_all_bosses()
+
+    def get_alive_bosses(self) -> List[Boss]:
+        """Lấy danh sách các Boss hiện đang còn sống."""
+        return self.boss_manager.get_alive_bosses()
+
+    def go_to_boss(self, target: Union[int, str]) -> Tuple[bool, str]:
+        """
+        Tự động di chuyển tới vị trí Boss bằng Xmap và tự đổi sang đúng khu của Boss.
+        target có thể là STT trong danh sách hoặc tên Boss (ví dụ: 1, 'Broly', 'Fide').
+        """
+        return self.boss_manager.go_to_boss(target)
+
+    def on_boss_spawn(self, callback: Callable[[Boss], None]) -> None:
+        """Lắng nghe thông báo Boss xuất hiện mới."""
+        self.boss_manager.on_boss_appeared_callbacks.append(callback)
+
+    def on_boss_killed(self, callback: Callable[[Boss], None]) -> None:
+        """Lắng nghe thông báo Boss bị tiêu diệt."""
+        self.boss_manager.on_boss_killed_callbacks.append(callback)
+

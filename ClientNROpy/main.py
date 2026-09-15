@@ -262,6 +262,11 @@ def print_cli_help():
     print("\n" + "=" * 60)
     print("         HƯỚNG DẪN DÒNG LỆNH (CLI) - CLIENT NRO PY         ")
     print("=" * 60)
+    print("  boss                   : Xem danh sách Boss đang còn sống (map, khu, thời gian)")
+    print("  boss all / history     : Xem toàn bộ lịch sử các Boss (kể cả đã bị hạ gục)")
+    print("  boss go <stt|tên>      : Tự động Xmap bay đến map và tự đổi sang khu của Boss")
+    print("                           Ví dụ: boss go 1, boss go Broly, boss go Fide")
+    print("  boss clear             : Xóa danh sách lịch sử Boss đã lưu")
     print("  xmap <id|tên>          : Bắt đầu Xmap di chuyển tới map chỉ định")
     print("                           Ví dụ: xmap 0, xmap 6, xmap 109, xmap nha, xmap cold")
     print("  xmap stop / cancel     : Dừng tiến trình Xmap hiện tại")
@@ -277,6 +282,31 @@ def print_cli_help():
     print("  help                   : Hiển thị bảng trợ giúp lệnh này")
     print("  exit / quit            : Đăng xuất và thoát chương trình")
     print("=" * 60 + "\n")
+
+
+def print_boss_list(client: ClientNRO, show_all: bool = False):
+    bosses = client.get_bosses() if show_all else client.get_alive_bosses()
+    title = "TOÀN BỘ LỊCH SỬ BOSS" if show_all else "DANH SÁCH BOSS ĐANG CÒN SỐNG"
+    print("\n" + "=" * 65)
+    print(f"             {title} ({len(bosses)} Boss)             ")
+    print("=" * 65)
+    if not bosses:
+        if show_all:
+            print("  (Chưa có thông báo Boss nào từ server)")
+        else:
+            print("  (Hiện không có Boss nào còn sống. Gõ 'boss all' để xem lịch sử)")
+        print("=" * 65 + "\n")
+        return
+
+    curr_map_id = client.myChar.mapInfo.mapID
+    curr_zone_id = client.myChar.mapInfo.zoneID
+
+    for i, b in enumerate(bosses):
+        boss_str = b.to_string(use_color=True, current_map_id=curr_map_id, current_zone_id=curr_zone_id)
+        print(f"  [{i+1:02d}] {boss_str}")
+    print("=" * 65)
+    print("  * Mẹo: Gõ 'boss go <stt|tên>' để tự động Xmap và đổi khu đến Boss!\n")
+
 
 
 def interactive_cli(client: ClientNRO):
@@ -332,7 +362,33 @@ def interactive_cli(client: ClientNRO):
             else:
                 print("Cú pháp: chat <nội dung>")
 
+        elif cmd == "boss":
+            if not args or args[0].lower() in ("list", "ls"):
+                print_boss_list(client, show_all=False)
+
+            elif args[0].lower() in ("all", "history", "his"):
+                print_boss_list(client, show_all=True)
+
+            elif args[0].lower() in ("go", "hunt", "to"):
+                if len(args) < 2:
+                    print("Cú pháp: boss go <stt|tên> (Ví dụ: boss go 1, boss go Broly)")
+                    continue
+                target = " ".join(args[1:])
+                ok, msg = client.go_to_boss(target)
+                print(f"[*] {msg}")
+
+            elif args[0].lower() in ("clear", "reset"):
+                client.boss_manager.clear()
+                print("[*] Đã xóa toàn bộ lịch sử Boss!")
+
+            else:
+                # Nếu gõ trực tiếp STT hoặc tên boss (vd: 'boss 1' hoặc 'boss broly')
+                target = " ".join(args)
+                ok, msg = client.go_to_boss(target)
+                print(f"[*] {msg}")
+
         elif cmd == "xmap":
+
             if not args:
                 print("Cú pháp: xmap <id|tên|nha|cold...>. Gõ 'help' để xem chi tiết.")
                 continue

@@ -44,6 +44,8 @@ from .zone_info import ZoneInfo
 from .map_info import MapInfo
 from .char import Char
 from .chat_vip import ChatVip
+from .boss import Boss
+from .boss_manager import BossManager
 
 # 4. Service, Controller và Client cấp cao
 from .service import Service
@@ -86,6 +88,8 @@ __all__ = [
     "MapInfo",
     "Char",
     "ChatVip",
+    "Boss",
+    "BossManager",
     "Service",
     "Controller",
     "ClientNRO",
@@ -100,3 +104,4 @@ __all__ = [
     "get_map_name",
     "resolve_map_id",
 ]
+
