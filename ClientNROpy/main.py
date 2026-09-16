@@ -303,6 +303,7 @@ def print_cli_help():
     print("  hunt all                    : Bật / Tắt săn tất cả Boss (không theo whitelist)")
     print("  hunt loot                   : Bật / Tắt tự động nhặt đồ khi Boss chết")
     print("  hunt revive                 : Bật / Tắt tự hồi sinh và quay lại map Boss")
+    print("  hunt patrol                 : Bật / Tắt tự động tuần tra các map Tương Lai khi rảnh")
     print("  hunt clear                  : Xóa toàn bộ Whitelist (quay về săn tất cả)")
     print("-" * 65)
     print("  captest                     : Test xài capsule ĐB (194), in panel map server trả về")
@@ -330,6 +331,10 @@ def print_cli_help():
     print("  shuttle stop / status       : Dừng / xem trạng thái shuttle")
     print("-" * 65)
     print("  [TIỆN ÍCH KHÁC]")
+    print("  useitem <id> <phút>         : Tự động dùng item theo chu kỳ phút (vd: useitem 380 10)")
+    print("  useitem stop / status       : Dừng hoặc xem trạng thái tự động dùng item")
+    print("  autohs [on|off|ngoc|ve]     : Bật / Tắt tự hồi sinh (Mặc định: BẬT bằng ngọc tại chỗ)")
+    print("  hs / revive [ngoc]          : Hồi sinh thủ công (về nhà miễn phí, thêm 'ngoc' để hồi sinh tại chỗ)")
     print("  map                         : Xem thông tin bản đồ hiện tại, tọa độ và waypoints")
     print("  zone [id]                   : Xem danh sách khu hoặc đổi khu (vd: zone 5)")
     print("  chat <nội dung>             : Chat trong bản đồ")
@@ -354,6 +359,8 @@ def print_hunt_status(client: ClientNRO):
     print(f"- Thời gian đổi khu:     {st.get('scan_zone_delay_str', '0.50s - 0.70s')}")
     print(f"- Tự nhặt đồ khi xong:   {'BẬT' if st['auto_loot'] else 'TẮT'}")
     print(f"- Tự hồi sinh quay lại:  {'BẬT' if st['auto_revive'] else 'TẮT'}")
+    patrol_str = f"Map {st.get('patrol_map_id')} ({st.get('patrol_map_name', '')})" if st.get('patrol_map_id', -1) != -1 else "Chưa xác định"
+    print(f"- Tuần tra Tương Lai:    {'BẬT' if st.get('auto_patrol_future', True) else 'TẮT'} (Đang ở/hướng tới: {patrol_str})")
     if st['current_boss']:
         b = st['current_boss']
         z_str = f"Khu {b.get('zone_id')}" if b.get('zone_id', -1) >= 0 else "Chưa rõ khu"
@@ -404,28 +411,49 @@ def print_shuttle_status(client: ClientNRO):
     print("=" * 65 + "\n")
 
 
-def print_boss_list(client: ClientNRO, show_all: bool = False):
-    bosses = client.get_bosses() if show_all else client.get_alive_bosses()
-    title = "TOÀN BỘ LỊCH SỬ BOSS" if show_all else "DANH SÁCH BOSS ĐANG CÒN SỐNG"
-    print("\n" + "=" * 65)
-    print(f"             {title} ({len(bosses)} Boss)             ")
-    print("=" * 65)
-    if not bosses:
-        if show_all:
-            print("  (Chưa có thông báo Boss nào từ server)")
+def print_boss_list(client: ClientNRO, filter_mode: str = "all"):
+    all_bosses = client.get_bosses()
+    alive_count = sum(1 for b in all_bosses if not b.is_died)
+    dead_count = sum(1 for b in all_bosses if b.is_died)
+
+    if filter_mode == "alive":
+        display_bosses = [b for b in all_bosses if not b.is_died]
+        title = "DANH SÁCH BOSS ĐANG CÒN SỐNG"
+    elif filter_mode == "dead":
+        display_bosses = [b for b in all_bosses if b.is_died]
+        title = "DANH SÁCH BOSS ĐÃ BỊ TIÊU DIỆT"
+    else:
+        display_bosses = all_bosses
+        title = "BẢNG THEO DÕI TOÀN BỘ BOSS"
+
+    print("\n" + "=" * 70)
+    print(f"             {title} ({len(display_bosses)} Boss)")
+    print(f"         [🟢 CÒN SỐNG: {alive_count}  |  🔴 ĐÃ CHẾT / BỊ HẠ: {dead_count}]")
+    print("=" * 70)
+
+    if not display_bosses:
+        if filter_mode == "alive":
+            print("  (Hiện không có Boss nào còn sống. Gõ 'boss' để xem toàn bộ lịch sử)")
+        elif filter_mode == "dead":
+            print("  (Chưa có Boss nào bị tiêu diệt)")
         else:
-            print("  (Hiện không có Boss nào còn sống. Gõ 'boss all' để xem lịch sử)")
-        print("=" * 65 + "\n")
+            print("  (Chưa ghi nhận thông báo Boss nào từ server)")
+        print("=" * 70 + "\n")
         return
 
-    curr_map_id = client.myChar.mapInfo.mapID
-    curr_zone_id = client.myChar.mapInfo.zoneID
+    curr_map_id = getattr(client.myChar.mapInfo, "mapID", -1) if (client.myChar and client.myChar.mapInfo) else -1
+    curr_zone_id = getattr(client.myChar.mapInfo, "zoneID", -1) if (client.myChar and client.myChar.mapInfo) else -1
 
-    for i, b in enumerate(bosses):
+    for b in display_bosses:
+        try:
+            stt = all_bosses.index(b) + 1
+        except ValueError:
+            stt = 0
         boss_str = b.to_string(use_color=True, current_map_id=curr_map_id, current_zone_id=curr_zone_id)
-        print(f"  [{i+1:02d}] {boss_str}")
-    print("=" * 65)
-    print("  * Mẹo: Gõ 'boss go <stt|tên>' để tự động Xmap và đổi khu đến Boss!\n")
+        print(f"  [{stt:02d}] {boss_str}")
+
+    print("=" * 70)
+    print("  * Mẹo: Gõ 'boss go <stt|tên>' (hoặc 'boss <stt>') để Xmap và đổi khu đến Boss!\n")
 
 
 
@@ -482,12 +510,77 @@ def interactive_cli(client: ClientNRO):
             else:
                 print("Cú pháp: chat <nội dung>")
 
-        elif cmd == "boss":
-            if not args or args[0].lower() in ("list", "ls"):
-                print_boss_list(client, show_all=False)
+        elif cmd in ("hs", "revive", "hoisinh", "wake"):
+            at_place = False
+            if args and args[0].lower() in ("ngoc", "gem", "place", "here", "1"):
+                at_place = True
+            ok, msg = client.revive(at_place=at_place)
+            print(f"[*] {msg}")
 
-            elif args[0].lower() in ("all", "history", "his"):
-                print_boss_list(client, show_all=True)
+        elif cmd in ("autohs", "autors", "auto_revive"):
+            if not args:
+                client.toggle_auto_revive()
+            elif args[0].lower() in ("on", "start", "1", "true"):
+                client.auto_revive_manager.enable()
+            elif args[0].lower() in ("off", "stop", "0", "false"):
+                client.auto_revive_manager.disable()
+            elif args[0].lower() in ("gem", "ngoc", "place", "here"):
+                client.set_auto_revive_mode("gem")
+            elif args[0].lower() in ("town", "ve", "thanh", "nha"):
+                client.set_auto_revive_mode("town")
+            elif args[0].lower() in ("status", "st", "info"):
+                st = client.get_auto_revive_status()
+                print("\n=== TRẠNG THÁI TỰ ĐỘNG HỒI SINH ===")
+                print(f"- Hoạt động:             {'ĐANG BẬT [ON]' if st['is_enabled'] else 'ĐÃ TẮT [OFF]'}")
+                print(f"- Chế độ:                {st['mode_str']}")
+                print(f"- Đã hồi sinh:           {st['revive_count']} lần")
+                print(f"- Trạng thái nhân vật:   {'ĐÃ CHẾT' if st['is_currently_dead'] else 'CÒN SỐNG'}\n")
+            else:
+                print("Cú pháp: autohs [on|off|ngoc|ve|status]")
+
+        elif cmd == "useitem":
+            if not args or args[0].lower() in ("status", "st", "info"):
+                st = client.get_auto_use_item_status()
+                print("\n=== TRẠNG THÁI TỰ ĐỘNG SỬ DỤNG ITEM ===")
+                print(f"- Hoạt động:             {'ĐANG BẬT [ON]' if st['is_enabled'] else 'ĐÃ TẮT [OFF]'}")
+                if st['item_template_id'] is not None:
+                    print(f"- Item Template ID:      {st['item_template_id']}")
+                    print(f"- Chu kỳ lặp:            {st['interval_minutes']:g} phút")
+                    print(f"- Có trong Balo:         {'CÓ (x' + str(st['quantity_in_bag']) + ')' if st['has_item_in_bag'] else 'HẾT / KHÔNG CÓ'}")
+                    print(f"- Đã dùng thành công:    {st['use_count']} lần")
+                    print(f"- Lần dùng tiếp theo:    {st['remaining_time_str'] if st['is_enabled'] else 'N/A'}\n")
+                else:
+                    print("- Chưa thiết lập vật phẩm nào!")
+                    print("  Cú pháp: useitem <id> <thời gian phút> (Ví dụ: useitem 380 10)\n")
+
+            elif args[0].lower() in ("stop", "off", "0", "false"):
+                ok, msg = client.stop_auto_use_item()
+                print(f"[*] {msg}")
+
+            elif args[0].lower() in ("now", "use"):
+                ok, msg = client.auto_use_item_manager.execute_now()
+
+            elif len(args) >= 2:
+                try:
+                    item_id = int(args[0])
+                    interval_min = float(args[1])
+                    ok, msg = client.start_auto_use_item(item_id, interval_min)
+                    print(f"[*] {msg}")
+                except ValueError:
+                    print("Cú pháp: useitem <id> <thời gian phút> (Ví dụ: useitem 380 10)")
+            else:
+                print("Cú pháp: useitem <id> <thời gian phút> (Ví dụ: useitem 380 10)")
+                print("Dừng lại: useitem stop | Xem trạng thái: useitem status")
+
+        elif cmd == "boss":
+            if not args or args[0].lower() in ("list", "ls", "all", "history", "his"):
+                print_boss_list(client, filter_mode="all")
+
+            elif args[0].lower() in ("alive", "live", "song"):
+                print_boss_list(client, filter_mode="alive")
+
+            elif args[0].lower() in ("dead", "die", "chet"):
+                print_boss_list(client, filter_mode="dead")
 
             elif args[0].lower() in ("go", "hunt", "to"):
                 if len(args) < 2:
@@ -589,6 +682,9 @@ def interactive_cli(client: ClientNRO):
                 elif sub in ("revive", "hoisinh"):
                     client.boss_hunter.auto_revive = not client.boss_hunter.auto_revive
                     print(f"[*] Tự hồi sinh và quay lại map Boss (auto_revive): {'BẬT' if client.boss_hunter.auto_revive else 'TẮT'}!")
+                elif sub in ("patrol", "tuantra"):
+                    is_p = client.boss_hunter.toggle_auto_patrol()
+                    print(f"[*] Tự động tuần tra map Tương Lai khi rảnh (auto_patrol_future): {'BẬT' if is_p else 'TẮT'}!")
                 else:
                     # Nếu gõ: hunt Broly hoặc tên boss
                     boss_name = " ".join(args)

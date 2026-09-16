@@ -57,17 +57,21 @@ class BossManager:
         self.on_boss_updated_callbacks: List[Callable[[Boss], None]] = []
 
         # Đăng ký hook nếu có client
-        if self.client:
-            self._setup_client_hooks()
-
-    def _setup_client_hooks(self) -> None:
-        """Đăng ký lắng nghe sự kiện từ client và controller."""
         if hasattr(self.client, "controller"):
             self.client.controller.on_chat_vip_callbacks.append(self.handle_chat_vip_obj)
             self.client.controller.on_map_info_callbacks.append(self.on_map_changed)
+            self.client.controller.on_char_info_callbacks.append(self.on_char_updated)
+            if hasattr(self.client.controller, "on_char_in_map_callbacks"):
+                self.client.controller.on_char_in_map_callbacks.append(self.on_char_updated)
 
         if hasattr(self.client, "xmap_controller"):
             self.client.xmap_controller.on_finish_callbacks.append(self._on_xmap_finished)
+
+    def on_char_updated(self, char) -> None:
+        """Kích hoạt liên tục khi có nhân vật xuất hiện hoặc cập nhật máu trong map (tương tự Boss.Update() trong C#)."""
+        if self.client and hasattr(self.client, "myChar") and self.client.myChar:
+            map_info = self.client.myChar.mapInfo
+            self.update_boss_status(map_info.mapID, map_info.zoneID, map_info.chars)
 
     @classmethod
     def resolve_boss_map_id(cls, boss_name: str, map_name: str) -> int:
@@ -118,6 +122,50 @@ class BossManager:
         return resolved if resolved is not None else -1
 
     @classmethod
+    def _extract_killed_info(cls, text: str) -> Optional[Tuple[str, str]]:
+        """Bóc tách killer và boss_name từ các định dạng thông báo tiêu diệt Boss."""
+        # 1. Định dạng chuẩn C# (strBossHasBeenKilled)
+        for k in cls.STR_BOSS_KILLED:
+            if k in text:
+                temp_text = text
+                for sk in cls.STR_BOSS_KILLED:
+                    temp_text = temp_text.replace(sk, "|")
+                parts = temp_text.split("|")
+                if len(parts) >= 2 and parts[0].strip() and parts[1].strip():
+                    killer = parts[0].strip()
+                    boss_name = parts[1].strip()
+                    if boss_name.upper().startswith("BOSS "):
+                        boss_name = boss_name[5:].strip()
+                    return killer, boss_name
+
+        # 2. Hỗ trợ các định dạng thông báo tiếng Việt phổ biến khác
+        m1 = re.search(r"BOSS\s+(.+?)\s+vừa\s+bị\s+(.+?)\s+tiêu\s+diệt", text, re.IGNORECASE)
+        if m1:
+            return m1.group(2).strip(), m1.group(1).strip()
+
+        m2 = re.search(r"(.+?)\s+vừa\s+bị\s+tiêu\s+diệt\s+bởi\s+(.+)", text, re.IGNORECASE)
+        if m2:
+            return m2.group(2).strip(), m2.group(1).strip()
+
+        m3 = re.search(r"(.+?)\s+đã\s+bị\s+(.+?)\s+tiêu\s+diệt", text, re.IGNORECASE)
+        if m3:
+            return m3.group(2).strip(), m3.group(1).strip()
+
+        m4 = re.search(r"(.+?)\s+đã\s+tiêu\s+diệt\s+được\s+(.+)", text, re.IGNORECASE)
+        if m4:
+            return m4.group(1).strip(), m4.group(2).strip()
+
+        m5 = re.search(r"(.+?)\s+đã\s+tiêu\s+diệt\s+(.+)", text, re.IGNORECASE)
+        if m5:
+            return m5.group(1).strip(), m5.group(2).strip()
+
+        m6 = re.search(r"(?:BOSS\s+)?(.+?)\s+(?:đã|vừa)\s+bị\s+tiêu\s+diệt", text, re.IGNORECASE)
+        if m6:
+            return "", m6.group(1).strip()
+
+        return None
+
+    @classmethod
     def parse_boss_announcement(cls, chat_vip_text: str) -> Optional[Boss]:
         """
         Bóc tách chuỗi ChatVip để kiểm tra xem có phải thông báo Boss hay không.
@@ -128,17 +176,10 @@ class BossManager:
             text = text[1:].strip()
 
         # 1. Kiểm tra Boss bị tiêu diệt
-        if any(k in text for k in cls.STR_BOSS_KILLED):
-            temp_text = text
-            for k in cls.STR_BOSS_KILLED:
-                temp_text = temp_text.replace(k, "|")
-            parts = temp_text.split("|")
-            if len(parts) >= 2:
-                killer = parts[0].strip()
-                boss_name = parts[1].strip()
-                if boss_name.upper().startswith("BOSS "):
-                    boss_name = boss_name[5:].strip()
-                return Boss(name=boss_name, map_name="", is_died=True, killer=killer)
+        killed_info = cls._extract_killed_info(text)
+        if killed_info:
+            killer, boss_name = killed_info
+            return Boss(name=boss_name, map_name="", is_died=True, killer=killer)
 
         # 2. Kiểm tra Boss xuất hiện
         is_appear = any(app in text for app in cls.STR_BOSS_APPEARED[1:4]) or text.startswith(cls.STR_BOSS_APPEARED[0])
@@ -180,46 +221,40 @@ class BossManager:
             text = text[1:].strip()
 
         # 1. Kiểm tra Boss bị tiêu diệt
-        if any(k in text for k in self.STR_BOSS_KILLED):
-            temp_text = text
-            for k in self.STR_BOSS_KILLED:
-                temp_text = temp_text.replace(k, "|")
-            parts = temp_text.split("|")
-            if len(parts) >= 2:
-                killer = parts[0].strip()
-                boss_name = parts[1].strip()
-                if boss_name.upper().startswith("BOSS "):
-                    boss_name = boss_name[5:].strip()
+        killed_info = self._extract_killed_info(text)
+        if killed_info:
+            killer, boss_name = killed_info
+            boss = None
+            # Tìm Boss gần nhất trong danh sách (Last) khớp tên
+            norm_bname = normalize_str(boss_name)
+            for b in reversed(self.list_bosses):
+                # Ngoại lệ map 79, 82, 83 với Tiểu đội sát thủ
+                if b.map_id in (79, 82, 83):
+                    if re.search(
+                        r"(Tiểu đội trưởng|(Captain|Kapten) Ginyu|Số [1-4]|Jeice|Burter|Recoome|Guldo)",
+                        b.name,
+                        re.IGNORECASE,
+                    ):
+                        continue
+                if (b.name == boss_name or normalize_str(b.name) == norm_bname) and not b.killer:
+                    boss = b
+                    break
 
-                boss = None
-                # Tìm Boss gần nhất trong danh sách (Last)
-                for b in reversed(self.list_bosses):
-                    # Ngoại lệ map 79, 82, 83 với Tiểu đội sát thủ
-                    if b.map_id in (79, 82, 83):
-                        if re.search(
-                            r"(Tiểu đội trưởng|(Captain|Kapten) Ginyu|Số [1-4]|Jeice|Burter|Recoome|Guldo)",
-                            b.name,
-                            re.IGNORECASE,
-                        ):
-                            continue
-                    if b.name == boss_name and not b.killer:
-                        boss = b
-                        break
+            if boss is None:
+                # Mô phỏng C#: Nếu chưa có trong danh sách thì tạo mới với isDied = true
+                boss = Boss(name=boss_name, map_name="", is_died=True, killer=killer)
+                self.list_bosses.append(boss)
+            else:
+                boss.is_died = True
+                boss.killer = killer
 
-                if boss is None:
-                    boss = Boss(name=boss_name, map_name="", is_died=True, killer=killer)
-                    self.list_bosses.append(boss)
-                else:
-                    boss.is_died = True
-                    boss.killer = killer
-
-                self._trim_bosses()
-                for cb in self.on_boss_killed_callbacks:
-                    try:
-                        cb(boss)
-                    except Exception:
-                        pass
-                return boss
+            self._trim_bosses()
+            for cb in self.on_boss_killed_callbacks:
+                try:
+                    cb(boss)
+                except Exception:
+                    pass
+            return boss
 
         # 2. Kiểm tra Boss xuất hiện
         is_appear = any(app in text for app in self.STR_BOSS_APPEARED[1:4]) or text.startswith(self.STR_BOSS_APPEARED[0])
@@ -320,9 +355,12 @@ class BossManager:
     ) -> None:
         """
         Cập nhật trạng thái sống/chết của các Boss trong danh sách theo thực tế map hiện tại.
-        Mô phỏng hàm Update() trong Mod/Boss.cs.
+        Mô phỏng chính xác hàm Update() trong Mod/Boss.cs của C#.
         """
         chars_list = list(chars_in_map.values()) if chars_in_map else []
+        # Tương tự !Char.isLoadingMap trong C#: nếu map chưa tải xong nhân vật (chars_list rỗng),
+        # KHÔNG ĐƯỢC đánh dấu Boss đã chết để tránh báo tử nhầm khi vừa vào map!
+        has_chars = len(chars_list) > 0
 
         for boss in self.list_bosses:
             if boss.is_died:
@@ -331,9 +369,11 @@ class BossManager:
             if boss.map_id == current_map_id and current_map_id != -1:
                 # Tìm Boss trong danh sách nhân vật
                 found_char = None
+                norm_b = normalize_str(boss.name)
                 for ch in chars_list:
                     ch_name = getattr(ch, "cName", "")
-                    if ch_name == boss.name:
+                    norm_c = normalize_str(ch_name)
+                    if norm_c == norm_b or norm_b in norm_c or norm_c in norm_b:
                         found_char = ch
                         break
 
@@ -342,15 +382,27 @@ class BossManager:
                     if boss.zone_id == -1:
                         boss.zone_id = current_zone_id
 
-                    # Nếu nhân vật đã chết
+                    # Nếu nhân vật đã chết (máu = 0, isDie hoặc statusMe = 14)
                     is_die = getattr(found_char, "isDie", False)
                     hp = getattr(found_char, "cHP", 1)
-                    if is_die or hp == 0:
+                    status_me = getattr(found_char, "statusMe", 1)
+                    if is_die or hp <= 0 or status_me == 14:
                         boss.is_died = True
+                        for cb in self.on_boss_killed_callbacks:
+                            try:
+                                cb(boss)
+                            except Exception:
+                                pass
                 else:
-                    # Nếu đang ở đúng khu vực của Boss mà không thấy Boss -> Boss đã chết
-                    if boss.zone_id == current_zone_id and boss.zone_id != -1:
+                    # Chỉ khi khu vực đã tải xong nhân vật (has_chars == True)
+                    # mà đang ở đúng khu vực của Boss nhưng không thấy Boss -> Boss đã chết
+                    if has_chars and boss.zone_id == current_zone_id and boss.zone_id != -1:
                         boss.is_died = True
+                        for cb in self.on_boss_killed_callbacks:
+                            try:
+                                cb(boss)
+                            except Exception:
+                                pass
 
     def get_alive_bosses(self) -> List[Boss]:
         """Lấy danh sách các Boss đang còn sống."""
@@ -378,12 +430,9 @@ class BossManager:
         if not raw:
             return None
 
-        # Nếu là số nguyên dưới dạng chuỗi
+        # Nếu là số nguyên dưới dạng chuỗi (STT hiển thị)
         if raw.isdigit():
             idx = int(raw)
-            alive = self.get_alive_bosses()
-            if 1 <= idx <= len(alive):
-                return alive[idx - 1]
             if 1 <= idx <= len(self.list_bosses):
                 return self.list_bosses[idx - 1]
             return None

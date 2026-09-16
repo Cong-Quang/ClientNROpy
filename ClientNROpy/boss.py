@@ -76,13 +76,13 @@ class Boss:
 
         # Trạng thái sống / chết
         if not self.is_died:
-            zone_part = f"khu {self.zone_id} - " if self.zone_id > -1 else ""
-            status_str = f"{zone_part}{self.time_alive_str()}"
+            zone_part = f"Khu {self.zone_id} - " if self.zone_id > -1 else ""
+            status_str = f"[CÒN SỐNG] {zone_part}{self.time_alive_str()}"
         else:
             if self.killer:
-                status_str = f"Bị {self.killer} tiêu diệt"
+                status_str = f"[ĐÃ CHẾT] Bị {self.killer} tiêu diệt"
             else:
-                status_str = "Đã chết"
+                status_str = "[ĐÃ CHẾT]"
 
         if not use_color:
             return f"{self.name} - {map_str} - {status_str}"
@@ -94,7 +94,7 @@ class Boss:
             RED = "\033[91m"
             killer_colored = f"{RED}{self.killer}{GRAY}" if self.killer else ""
             kill_info = f"Bị {killer_colored} tiêu diệt" if self.killer else "Đã chết"
-            return f"{GRAY}{self.name} - {map_str} - {kill_info}{RESET}"
+            return f"{RED}[ĐÃ CHẾT]{RESET} {GRAY}{self.name} - {map_str} - {kill_info}{RESET}"
 
         # Đang còn sống
         is_same_map = current_map_id == self.map_id and self.map_id != -1
@@ -112,15 +112,16 @@ class Boss:
         zone_part = ""
         if self.zone_id > -1:
             if is_same_zone:
-                zone_part = f"{RED}khu {self.zone_id}{RESET} - "
+                zone_part = f"{RED}Khu {self.zone_id}{RESET} - "
             elif is_same_map:
-                zone_part = f"{YELLOW}khu {self.zone_id}{RESET} - "
+                zone_part = f"{YELLOW}Khu {self.zone_id}{RESET} - "
             else:
-                zone_part = f"khu {YELLOW}{self.zone_id}{RESET} - "
+                zone_part = f"Khu {YELLOW}{self.zone_id}{RESET} - "
 
         time_part = f"{GREEN}{self.time_alive_str()}{RESET}"
 
         return (
+            f"{GREEN}[CÒN SỐNG]{RESET} "
             f"{name_color}{self.name}{RESET} - "
             f"{map_color}{map_str}{RESET} - "
             f"{zone_part}{time_part}"

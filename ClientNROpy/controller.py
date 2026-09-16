@@ -46,6 +46,7 @@ class Controller(IMessageHandler):
         self.on_chat_callbacks: List[Callable[[int, str], None]] = []
         self.on_server_message_callbacks: List[Callable[[str], None]] = []
         self.on_char_info_callbacks: List[Callable[[Char], None]] = []
+        self.on_char_in_map_callbacks: List[Callable[[Char], None]] = []
         self.on_map_info_callbacks: List[Callable[[MapInfo], None]] = []
         self.on_zone_info_callbacks: List[Callable[[List[ZoneInfo]], None]] = []
         self.on_bag_update_callbacks: List[Callable[[List[Item]], None]] = []
@@ -665,6 +666,11 @@ class Controller(IMessageHandler):
                 char.mapInfo.chars[charID] = c
                 if self.debug:
                     print(f"[Controller] Player entered map: '{c.cName}' (ID={charID}) at ({c.cx},{c.cy})")
+                for cb in self.on_char_in_map_callbacks:
+                    try:
+                        cb(c)
+                    except Exception:
+                        pass
                 return
 
             # ------------------------------------------------------------------
@@ -677,6 +683,11 @@ class Controller(IMessageHandler):
                     removed = char.mapInfo.chars.pop(charID)
                     if self.debug:
                         print(f"[Controller] Player left map: '{removed.cName}' (ID={charID})")
+                    for cb in self.on_char_in_map_callbacks:
+                        try:
+                            cb(removed)
+                        except Exception:
+                            pass
                 return
 
             # ------------------------------------------------------------------
@@ -1019,6 +1030,11 @@ class Controller(IMessageHandler):
                     target.cHPFull = msg.readInt3Byte()
                     msg.reader().readShort()  # eff5BuffHp
                     msg.reader().readShort()  # eff5BuffMp
+                    for cb in self.on_char_in_map_callbacks:
+                        try:
+                            cb(target)
+                        except Exception:
+                            pass
                 return
 
             elif sub == 14:
@@ -1033,6 +1049,11 @@ class Controller(IMessageHandler):
                         target.cHPFull = msg.readInt3Byte()
                     except Exception:
                         pass
+                    for cb in self.on_char_in_map_callbacks:
+                        try:
+                            cb(target)
+                        except Exception:
+                            pass
                 return
 
             elif sub == 15:

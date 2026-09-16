@@ -281,6 +281,14 @@ class Service:
         except Exception as ex:
             print(f"[Service] returnTownFromDead error: {ex}")
 
+    def wakeUpFromDead(self) -> None:
+        """Hồi sinh tại chỗ bằng ngọc khi nhân vật chết (cmd -16 trong C# Service.cs)."""
+        try:
+            m = Message(-16)
+            self.session.sendMessage(m)
+        except Exception as ex:
+            print(f"[Service] wakeUpFromDead error: {ex}")
+
     def useItem(self, item_type: int = 0, where: int = 1, index: int = -1, template: int = -1) -> None:
         """Sử dụng vật phẩm trong hành trang (cmd -43 trong C# Service.cs)."""
         try:

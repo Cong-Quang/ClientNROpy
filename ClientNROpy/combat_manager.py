@@ -500,6 +500,12 @@ class CombatManager:
         if my_char is None:
             return
 
+        # Nếu BossHunter đang trong trạng thái COMBAT, nhường quyền đánh để CHỈ ĐẤM BOSS
+        if self.client and hasattr(self.client, "boss_hunter"):
+            bh = self.client.boss_hunter
+            if bh and getattr(bh, "is_enabled", False) and getattr(bh, "state", "") == "COMBAT":
+                return
+
         # 1. Xử lý khi nhân vật chết thật sự (đọc 2 lần chống chết ảo)
         is_dead = (my_char.cHPFull > 0 and my_char.cHP <= 0) or getattr(my_char, "statusMe", 1) == 14
         if is_dead:

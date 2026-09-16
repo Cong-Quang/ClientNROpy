@@ -24,6 +24,8 @@ from .boss_manager import BossManager
 from .boss_hunter import BossHunter
 from .combat_manager import CombatManager
 from .auto_quest_bomong import AutoQuest
+from .auto_revive_manager import AutoReviveManager
+from .auto_use_item_manager import AutoUseItemManager
 from .xmap import XmapController, MapNext
 
 
@@ -65,6 +67,12 @@ class ClientNRO:
 
         # Shuttle tự động di chuyển qua lại 2 map (ShuttleManager)
         self.shuttle_manager: ShuttleManager = ShuttleManager(self)
+
+        # Tự động hồi sinh khi chết (AutoReviveManager - Mặc định BẬT bằng ngọc)
+        self.auto_revive_manager: AutoReviveManager = AutoReviveManager(self)
+
+        # Tự động sử dụng vật phẩm theo chu kỳ thời gian (AutoUseItemManager)
+        self.auto_use_item_manager: AutoUseItemManager = AutoUseItemManager(self)
 
 
 
@@ -271,6 +279,53 @@ class ClientNRO:
     def on_xmap_finish(self, callback: Callable[[bool, str], None]) -> None:
         """Lắng nghe sự kiện kết thúc Xmap (thành công hoặc thất bại)."""
         self.xmap_controller.on_finish_callbacks.append(callback)
+
+    # --------------------------------------------------------------------------
+    # Các hàm hồi sinh nhân vật (Mô phỏng Service.wakeUpFromDead & returnTownFromDead)
+    # --------------------------------------------------------------------------
+    def is_dead(self) -> bool:
+        """Kiểm tra nhân vật có đang trong trạng thái chết hay không."""
+        c = self.myChar
+        if not c:
+            return False
+        return (c.cHPFull > 0 and c.cHP <= 0) or getattr(c, "statusMe", 1) == 14
+
+    def revive(self, at_place: bool = False) -> Tuple[bool, str]:
+        """
+        Gửi lệnh hồi sinh nhân vật:
+        - at_place = False: Hồi sinh về nhà / làng (miễn phí, cmd -15).
+        - at_place = True: Hồi sinh tại chỗ bằng 1 ngọc (cmd -16).
+        """
+        if at_place:
+            self.service.wakeUpFromDead()
+            return True, "Đã gửi lệnh hồi sinh tại chỗ bằng 1 ngọc (cmd -16)!"
+        else:
+            self.service.returnTownFromDead()
+            return True, "Đã gửi lệnh hồi sinh về thành / nhà (cmd -15)!"
+
+    def toggle_auto_revive(self, enable: Optional[bool] = None) -> bool:
+        """Bật / Tắt tính năng tự động hồi sinh khi chết."""
+        return self.auto_revive_manager.toggle(enable)
+
+    def set_auto_revive_mode(self, mode: str) -> bool:
+        """Cài đặt chế độ tự hồi sinh ('gem' = ngọc tại chỗ, 'town' = về thành)."""
+        return self.auto_revive_manager.set_mode(mode)
+
+    def get_auto_revive_status(self) -> dict:
+        """Lấy thông tin trạng thái Auto Hồi Sinh."""
+        return self.auto_revive_manager.get_status()
+
+    def start_auto_use_item(self, item_id: int, interval_minutes: float) -> Tuple[bool, str]:
+        """Bắt đầu tự động sử dụng item Template ID theo chu kỳ phút."""
+        return self.auto_use_item_manager.start_auto(item_id, interval_minutes)
+
+    def stop_auto_use_item(self) -> Tuple[bool, str]:
+        """Dừng tự động dùng item."""
+        return self.auto_use_item_manager.stop()
+
+    def get_auto_use_item_status(self) -> dict:
+        """Lấy thông tin trạng thái Auto dùng item."""
+        return self.auto_use_item_manager.get_status()
 
     # --------------------------------------------------------------------------
     # Các hàm quản lý và săn Boss (Mô phỏng Mod/Boss.cs)
