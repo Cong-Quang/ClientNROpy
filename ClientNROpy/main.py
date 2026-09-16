@@ -271,6 +271,9 @@ def run_client(host="51.79.163.109", port=12457, username="poopooi01", password=
     print("\n" + "=" * 75)
     print("   HOÀN TẤT ĐỒNG BỘ VÀ BÓC TÁCH TOÀN BỘ DỮ LIỆU HEADLESS THÀNH CÔNG!   ")
     print("=" * 75)
+    print("[*] SẴN SÀNG! Hãy gõ lệnh 'hunt auto' (hoặc 'hunt on') để bắt đầu Auto Săn Boss & Tuần Tra.")
+    print("    - Tự tìm Boss thông báo và ưu tiên tuần tra Tương Lai khi rảnh!")
+    print("    - Hồi sinh bằng ngọc tại chỗ & Tự nhặt đồ: ĐÃ CẤU HÌNH SẴN!\n")
 
     return client
 
@@ -294,7 +297,8 @@ def print_cli_help():
     print("  combat                      : Xem bảng cấu hình chiến đấu và tàn sát hiện tại")
     print("-" * 65)
     print("  [AUTO SĂN BOSS HOÀN CHỈNH - AUTO HUNT]")
-    print("  hunt [on|off]               : Bật / Tắt Auto Săn Boss (Tự tìm, di chuyển, dò khu, đánh)")
+    print("  hunt auto / hunt on         : Bắt đầu Auto Săn Boss & Tuần tra khi rảnh")
+    print("  hunt off / stop             : Tạm dừng Auto Săn Boss")
     print("  hunt status                 : Xem trạng thái, mục tiêu và tiến độ săn Boss")
     print("  hunt delay <min> [max]      : Cài đặt thời gian ngẫu nhiên đổi khu (vd: hunt delay 0.5 0.7)")
     print("  hunt add <tên>              : Thêm Boss vào danh sách săn (Whitelist)")
@@ -303,7 +307,7 @@ def print_cli_help():
     print("  hunt all                    : Bật / Tắt săn tất cả Boss (không theo whitelist)")
     print("  hunt loot                   : Bật / Tắt tự động nhặt đồ khi Boss chết")
     print("  hunt revive                 : Bật / Tắt tự hồi sinh và quay lại map Boss")
-    print("  hunt patrol                 : Bật / Tắt tự động tuần tra các map Tương Lai khi rảnh")
+    print("  hunt patrol [all|namec|tl]  : Bật/tắt tuần tra (tùy chọn: namec, tl, all, list)")
     print("  hunt clear                  : Xóa toàn bộ Whitelist (quay về săn tất cả)")
     print("-" * 65)
     print("  captest                     : Test xài capsule ĐB (194), in panel map server trả về")
@@ -358,9 +362,10 @@ def print_hunt_status(client: ClientNRO):
     print(f"- Danh sách Whitelist:   {targets_str}")
     print(f"- Thời gian đổi khu:     {st.get('scan_zone_delay_str', '0.50s - 0.70s')}")
     print(f"- Tự nhặt đồ khi xong:   {'BẬT' if st['auto_loot'] else 'TẮT'}")
-    print(f"- Tự hồi sinh quay lại:  {'BẬT' if st['auto_revive'] else 'TẮT'}")
+    revive_str = "BẬT (Bằng Ngọc tại chỗ)" if (st['auto_revive'] and st.get('revive_mode') == 'gem') else ("BẬT (Về thành)" if st['auto_revive'] else "TẮT")
+    print(f"- Tự hồi sinh:           {revive_str}")
     patrol_str = f"Map {st.get('patrol_map_id')} ({st.get('patrol_map_name', '')})" if st.get('patrol_map_id', -1) != -1 else "Chưa xác định"
-    print(f"- Tuần tra Tương Lai:    {'BẬT' if st.get('auto_patrol_future', True) else 'TẮT'} (Đang ở/hướng tới: {patrol_str})")
+    print(f"- Tự động tuần tra:      {'BẬT (Ưu tiên Tương Lai)' if st.get('auto_patrol', True) else 'TẮT'} ({st.get('patrol_maps_count', 0)} map - Đang ở/tới: {patrol_str})")
     if st['current_boss']:
         b = st['current_boss']
         z_str = f"Khu {b.get('zone_id')}" if b.get('zone_id', -1) >= 0 else "Chưa rõ khu"
@@ -620,18 +625,20 @@ def interactive_cli(client: ClientNRO):
                 ok, msg = client.go_to_boss(target)
                 print(f"[*] {msg}")
 
-        elif cmd in ("hunt", "autohunt"):
+        elif cmd in ("hunt", "autohunt", "huntauto"):
             if not args:
                 is_on = client.toggle_auto_hunt()
-                print(f"[*] Auto Săn Boss: {'BẬT' if is_on else 'TẮT'}!")
+                print(f"[*] Auto Săn Boss & Tuần Tra: {'BẬT' if is_on else 'TẮT'}!")
             else:
                 sub = args[0].lower()
-                if sub in ("on", "start", "1", "true"):
+                if sub in ("auto", "on", "start", "1", "true"):
                     client.start_auto_hunt()
-                    print("[*] Auto Săn Boss: BẬT!")
+                    print("[*] Auto Săn Boss & Tuần Tra: ĐÃ KÍCH HOẠT (BẬT)!")
+                    print("    - Tự động tìm Boss mục tiêu và ưu tiên tuần tra Tương Lai khi rảnh.")
+                    print("    - Tự nhặt đồ và Hồi sinh bằng ngọc tại chỗ: BẬT.")
                 elif sub in ("off", "stop", "0", "false"):
                     client.stop_auto_hunt()
-                    print("[*] Auto Săn Boss: TẮT!")
+                    print("[*] Auto Săn Boss & Tuần Tra: ĐÃ TẮT (TẠM DỪNG)!")
                 elif sub in ("status", "st", "info"):
                     print_hunt_status(client)
                 elif sub in ("delay", "wait", "speed", "tg"):
@@ -678,13 +685,50 @@ def interactive_cli(client: ClientNRO):
                     print(f"[*] Chế độ săn tất cả Boss (hunt_all): {'BẬT' if client.boss_hunter.hunt_all else 'TẮT (Chỉ săn whitelist)'}!")
                 elif sub in ("loot", "nhatdo"):
                     client.boss_hunter.auto_loot = not client.boss_hunter.auto_loot
-                    print(f"[*] Tự động nhặt đồ khi Boss chết (auto_loot): {'BẬT' if client.boss_hunter.auto_loot else 'TẮT'}!")
                 elif sub in ("revive", "hoisinh"):
-                    client.boss_hunter.auto_revive = not client.boss_hunter.auto_revive
-                    print(f"[*] Tự hồi sinh và quay lại map Boss (auto_revive): {'BẬT' if client.boss_hunter.auto_revive else 'TẮT'}!")
+                    if len(args) > 1:
+                        rmode = args[1].lower()
+                        if rmode in ("ngoc", "gem", "1"):
+                            client.boss_hunter.revive_mode = "gem"
+                            client.boss_hunter.auto_revive = True
+                            print("[*] Tự hồi sinh săn Boss: BẬT [Bằng Ngọc tại chỗ (cmd -16)]!")
+                        elif rmode in ("ve", "town", "thanh"):
+                            client.boss_hunter.revive_mode = "town"
+                            client.boss_hunter.auto_revive = True
+                            print("[*] Tự hồi sinh săn Boss: BẬT [Về thành rồi quay lại (cmd -15)]!")
+                        elif rmode in ("off", "0", "false"):
+                            client.boss_hunter.auto_revive = False
+                            print("[*] Tự hồi sinh săn Boss: TẮT!")
+                    else:
+                        client.boss_hunter.auto_revive = not client.boss_hunter.auto_revive
+                        mode_label = "Bằng Ngọc tại chỗ" if client.boss_hunter.revive_mode == "gem" else "Về thành"
+                        print(f"[*] Tự hồi sinh săn Boss (auto_revive): {'BẬT [' + mode_label + ']' if client.boss_hunter.auto_revive else 'TẮT'}!")
                 elif sub in ("patrol", "tuantra"):
-                    is_p = client.boss_hunter.toggle_auto_patrol()
-                    print(f"[*] Tự động tuần tra map Tương Lai khi rảnh (auto_patrol_future): {'BẬT' if is_p else 'TẮT'}!")
+                    if len(args) > 1:
+                        mode = args[1].lower()
+                        if mode in ("on", "1", "start", "true"):
+                            client.boss_hunter.set_auto_patrol(True)
+                            print("[*] Tự động tuần tra: BẬT!")
+                        elif mode in ("off", "0", "stop", "false"):
+                            client.boss_hunter.set_auto_patrol(False)
+                            print("[*] Tự động tuần tra: TẮT!")
+                        elif mode in ("namec", "namek", "tdst"):
+                            client.boss_hunter.set_patrol_mode("namec")
+                            print(f"[*] Đã chuyển tuần tra sang các map Hành tinh Namec ({len(client.boss_hunter.patrol_maps)} map) để săn TDST!")
+                        elif mode in ("future", "tl", "tuonglai"):
+                            client.boss_hunter.set_patrol_mode("future")
+                            print(f"[*] Đã chuyển tuần tra sang các map Tương Lai ({len(client.boss_hunter.patrol_maps)} map)!")
+                        elif mode in ("all", "tatca"):
+                            client.boss_hunter.set_patrol_mode("all")
+                            print(f"[*] Đã chuyển tuần tra sang toàn bộ map Tương Lai + Namec ({len(client.boss_hunter.patrol_maps)} map)!")
+                        elif mode in ("list", "ls"):
+                            names = [f"{mid} ({get_map_name(mid)})" for mid in client.boss_hunter.patrol_maps]
+                            print(f"[*] Danh sách map tuần tra ({len(names)} map):\n  " + ", ".join(names))
+                        else:
+                            print("Cú pháp: hunt patrol [on|off|all|namec|future|list]")
+                    else:
+                        is_p = client.boss_hunter.toggle_auto_patrol()
+                        print(f"[*] Tự động tuần tra (auto_patrol): {'BẬT' if is_p else 'TẮT'} ({len(client.boss_hunter.patrol_maps)} map)!")
                 else:
                     # Nếu gõ: hunt Broly hoặc tên boss
                     boss_name = " ".join(args)
@@ -967,7 +1011,31 @@ def interactive_cli(client: ClientNRO):
             print(f"Không rõ lệnh '{cmd}'. Gõ 'help' để xem danh sách lệnh.")
 
 
-if __name__ == "__main__":
+def print_help():
+    print("=" * 70)
+    print("   HƯỚNG DẪN SỬ DỤNG CLIENT NRO (HEADLESS SIMULATOR)")
+    print("=" * 70)
+    print("Cú pháp khởi chạy:")
+    print("  ClientNRO.exe [host] [port] [username] [password] [version] [options]")
+    print()
+    print("Các tùy chọn (Options):")
+    print("  --help, -h          Hiển thị màn hình trợ giúp này và thoát.")
+    print("  --test-xmap         Chạy tự động kiểm thử tìm đường 9 chặng offline.")
+    print("  --xmap <map_name>   Tự động di chuyển Xmap đến map chỉ định sau khi login.")
+    print("  --no-cli            Đăng nhập xong rồi thoát (không vào giao diện dòng lệnh).")
+    print()
+    print("Ví dụ:")
+    print("  ClientNRO.exe --test-xmap")
+    print("  ClientNRO.exe 51.79.163.109 12457 poopooi01 02082003 2.1.4")
+    print("  ClientNRO.exe --xmap \"Đông Karin\"")
+    print("=" * 70)
+
+
+def main():
+    if "--help" in sys.argv or "-h" in sys.argv:
+        print_help()
+        sys.exit(0)
+
     # Hỗ trợ cờ kiểm thử nhanh từ dòng lệnh:
     # python -m ClientNROpy.main --test-xmap
     if "--test-xmap" in sys.argv:
@@ -1021,3 +1089,7 @@ if __name__ == "__main__":
     else:
         time.sleep(0.2)
         client.disconnect()
+
+
+if __name__ == "__main__":
+    main()

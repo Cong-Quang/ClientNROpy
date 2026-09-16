@@ -64,26 +64,41 @@ class BossHunter:
         "Android 15",
     ]
 
-    # Danh sách các map Tương Lai tuần tra khi rảnh rỗi
+    # Danh sách các map Tương Lai tuần tra (Xên bọ hung, Xên con, Black Goku, Zamas...)
     # 102: Nhà Gohan (Tương lai), 92: TP phía đông, 93: TP phía nam, 94: Đảo Balê,
     # 96: Thị trấn Ginder, 97: Thung lũng phía bắc, 98: TP phía bắc, 99: Ngọn núi phía bắc,
     # 100: Rừng nguyên sinh, 103: Võ đài Siêu Bọ Hung
     FUTURE_PATROL_MAPS: List[int] = [102, 92, 93, 94, 96, 97, 98, 99, 100, 103]
 
+    # Danh sách các map Hành tinh Namec tuần tra (Tiểu Đội Sát Thủ Namec: Số 4 -> Tiểu đội trưởng)
+    # 7: Làng Mori, 8: Đồi nấm tím, 9: Thị trấn Moori, 10: Thung lũng Namếc, 11: Thung lũng Maima,
+    # 12: Vực maima, 13: Đảo Guru, 31: Núi hoa vàng, 32: Núi hoa tím, 33: Nam Guru, 34: Đông Nam Guru, 43: Vách núi Moori
+    NAMEC_PATROL_MAPS: List[int] = [7, 8, 9, 10, 11, 12, 13, 31, 32, 33, 34, 43]
+
+    # Núi khỉ đỏ (79) - Nơi xuất hiện TDST Trái Đất (Số 4, Số 3, Số 2, Số 1, Tiểu đội trưởng)
+    RED_MONKEY_MAPS: List[int] = [7]
+
+    # Danh sách toàn bộ các map tuần tra khi rảnh rỗi (Mặc định: Tương Lai + Hành tinh Namec + Núi khỉ đỏ)
+    DEFAULT_PATROL_MAPS: List[int] = (
+        FUTURE_PATROL_MAPS + NAMEC_PATROL_MAPS + RED_MONKEY_MAPS
+    )
+
     def __init__(self, client=None):
         self.client = client
 
         # Cấu hình tính năng
-        self.is_enabled: bool = False
+        self.is_enabled: bool = False                 # Ban đầu chưa kích hoạt, chờ người dùng gõ lệnh 'hunt auto' hoặc 'hunt on'
         self.hunt_all: bool = False                   # Mặc định chỉ săn theo Whitelist
         self.target_bosses: Set[str] = set()          # Danh sách Boss muốn săn (chuỗi chuẩn hoá)
         for t in self.DEFAULT_WHITELIST:
             self.add_target(t)
 
-        self.auto_loot: bool = True                   # Tự động nhặt đồ sau khi Boss chết
-        self.auto_revive: bool = True                 # Tự động hồi sinh và quay lại đánh tiếp
-        self.auto_patrol_future: bool = True          # Tự động tuần tra map tương lai khi rảnh rỗi
-        self.patrol_map_index: int = 0                # Chỉ số map tương lai đang tuần tra
+        self.auto_loot: bool = True                   # Mặc định Tự động nhặt đồ sau khi Boss chết là BẬT
+        self.auto_revive: bool = True                 # Mặc định Tự động hồi sinh là BẬT
+        self.revive_mode: str = "gem"                 # Mặc định Hồi sinh bằng NGỌC tại chỗ
+        self.auto_patrol: bool = True                 # Mặc định Tự động tuần tra khi rảnh rỗi là BẬT
+        self.patrol_maps: List[int] = list(self.DEFAULT_PATROL_MAPS)  # Danh sách map đi tuần (ưu tiên Tương Lai trước)
+        self.patrol_map_index: int = 0                # Chỉ số map đang tuần tra (bắt đầu từ Tương Lai)
         self.min_scan_zone_delay: float = 0.5         # Thời gian dừng tối thiểu mỗi khu để dò boss (giây)
         self.max_scan_zone_delay: float = 0.7         # Thời gian dừng tối đa mỗi khu để dò boss (giây)
         self.max_zones_scan: int = 30                 # Số khu tối đa sẽ dò trong 1 map
@@ -191,14 +206,39 @@ class BossHunter:
         """Lấy danh sách tên boss trong Whitelist."""
         return list(self.target_bosses)
 
+    @property
+    def auto_patrol_future(self) -> bool:
+        """Hỗ trợ tương thích ngược với thuộc tính cũ."""
+        return self.auto_patrol
+
+    @auto_patrol_future.setter
+    def auto_patrol_future(self, val: bool) -> None:
+        self.auto_patrol = bool(val)
+
+    def set_patrol_mode(self, mode: str) -> None:
+        """
+        Cấu hình danh mục map tuần tra:
+        - 'all': Toàn bộ (Tương Lai + Namec + Núi khỉ đỏ)
+        - 'namec' / 'tdst': Chỉ các map Hành tinh Namec và Núi khỉ đỏ (săn TDST)
+        - 'future' / 'tl': Chỉ các map Tương Lai
+        """
+        m = mode.lower().strip()
+        if m in ("namec", "namek", "tdst"):
+            self.patrol_maps = list(self.NAMEC_PATROL_MAPS) + list(self.RED_MONKEY_MAPS)
+        elif m in ("future", "tl", "tuonglai"):
+            self.patrol_maps = list(self.FUTURE_PATROL_MAPS)
+        else:
+            self.patrol_maps = list(self.DEFAULT_PATROL_MAPS)
+        self.patrol_map_index = 0
+
     def set_auto_patrol(self, enabled: bool) -> None:
-        """Cấu hình tự động tuần tra các map Tương Lai khi rảnh rỗi."""
-        self.auto_patrol_future = bool(enabled)
+        """Cấu hình tự động tuần tra các map khi rảnh rỗi."""
+        self.auto_patrol = bool(enabled)
 
     def toggle_auto_patrol(self) -> bool:
-        """Bật / Tắt tự động tuần tra các map Tương Lai."""
-        self.auto_patrol_future = not self.auto_patrol_future
-        return self.auto_patrol_future
+        """Bật / Tắt tự động tuần tra."""
+        self.auto_patrol = not self.auto_patrol
+        return self.auto_patrol
 
     def set_hunt_all(self, val: bool) -> None:
         """Đặt chế độ săn tất cả hay chỉ theo Whitelist."""
@@ -342,9 +382,12 @@ class BossHunter:
             if my_char:
                 self._handle_moving(my_char)
         else:
-            # Nếu đang rảnh rỗi (chưa có thông báo Boss) và bật tự động tuần tra tương lai
-            if self.auto_patrol_future:
-                self.status_message = "Đang rảnh rỗi (chưa có Boss mục tiêu). Bắt đầu tuần tra các map Tương Lai..."
+            # Nếu đang rảnh rỗi (chưa có thông báo Boss) và bật tự động tuần tra
+            if self.auto_patrol and self.patrol_maps:
+                if self.patrol_map_index >= len(self.patrol_maps):
+                    self.patrol_map_index = 0
+                curr_map = self.patrol_maps[self.patrol_map_index]
+                self.status_message = f"Đang rảnh rỗi (chưa có Boss mục tiêu). Bắt đầu tuần tra map {curr_map} ({get_map_name(curr_map)})..."
                 print(f"[*] {self.status_message}")
                 self._change_state(self.STATE_PATROL)
             else:
@@ -509,13 +552,13 @@ class BossHunter:
 
     def _handle_patrol(self, my_char: Char) -> None:
         """
-        Tuần tra các map bên tương lai khi đang rảnh rỗi để tìm các boss xuất hiện trước:
+        Tuần tra các map (Tương Lai + Namec + Núi khỉ đỏ) khi đang rảnh rỗi để tìm các boss xuất hiện trước:
         - Nếu có thông báo Boss mới từ server (ChatVip) -> Dừng tuần tra, ưu tiên bay đến Boss đó ngay!
         - Nếu chưa ở map tuần tra hiện tại -> Xmap tới map tuần tra đó.
         - Khi ở trong map tuần tra -> Dò lần lượt từng khu:
             + Nếu phát hiện Boss mục tiêu trong khu -> Chuyển sang STATE_COMBAT đấm Boss!
             + Nếu gặp thông báo 'Khu vực đang có boss được hỗ trợ / Bạn không thể vào lúc này' -> Bỏ qua khu đó tạm thời!
-        - Khi đã dò hết các khu trong 1 map -> Di chuyển sang map tương lai tiếp theo trong danh sách!
+        - Khi đã dò hết các khu trong 1 map -> Di chuyển sang map tiếp theo trong danh sách!
         """
         # 1. Luôn kiểm tra ưu tiên: Có thông báo Boss mục tiêu mới từ server không?
         next_boss = self._select_next_boss()
@@ -527,7 +570,14 @@ class BossHunter:
             self._change_state(self.STATE_MOVING)
             return
 
-        target_map_id = self.FUTURE_PATROL_MAPS[self.patrol_map_index]
+        if not self.patrol_maps:
+            self._change_state(self.STATE_IDLE)
+            return
+
+        if self.patrol_map_index >= len(self.patrol_maps):
+            self.patrol_map_index = 0
+
+        target_map_id = self.patrol_maps[self.patrol_map_index]
         curr_map_id = getattr(my_char.mapInfo, "mapID", -1)
 
         # 2. Nếu chưa tới map tuần tra hiện tại -> Bắt đầu Xmap
@@ -535,7 +585,7 @@ class BossHunter:
             if self.client and hasattr(self.client, "xmap"):
                 xmap_st = self.client.xmap_status()
                 if not xmap_st.get("is_acting", False):
-                    self.status_message = f"[Tuần Tra Tương Lai] Đang di chuyển tới map {target_map_id} ({get_map_name(target_map_id)})..."
+                    self.status_message = f"[Tuần Tra] Đang di chuyển tới map {target_map_id} ({get_map_name(target_map_id)})..."
                     print(f"[*] {self.status_message}")
                     self.client.xmap(target_map_id)
             return
@@ -590,7 +640,7 @@ class BossHunter:
                     self._zone_blocked_by_quest = False
                     break
 
-                self.status_message = f"[Tuần Tra Tương Lai] Dò map {target_map_id} ({get_map_name(target_map_id)}): đổi sang Khu {khu}..."
+                self.status_message = f"[Tuần Tra] Dò map {target_map_id} ({get_map_name(target_map_id)}): đổi sang Khu {khu}..."
                 if self.client and hasattr(self.client, "change_zone"):
                     self.client.change_zone(khu)
                 time.sleep(0.5)
@@ -616,11 +666,11 @@ class BossHunter:
                 self._engage_patrol_boss(boss_name, target_map_id, khu)
                 return
 
-        # Đã dò hết các khu trong 1 map mà không thấy Boss -> Di chuyển sang map tương lai tiếp theo
-        self.patrol_map_index = (self.patrol_map_index + 1) % len(self.FUTURE_PATROL_MAPS)
-        next_map = self.FUTURE_PATROL_MAPS[self.patrol_map_index]
+        # Đã dò hết các khu trong 1 map mà không thấy Boss -> Di chuyển sang map tiếp theo
+        self.patrol_map_index = (self.patrol_map_index + 1) % len(self.patrol_maps)
+        next_map = self.patrol_maps[self.patrol_map_index]
         self.status_message = (
-            f"[Tuần Tra Tương Lai] Đã dò hết toàn bộ {tong_so_khu} khu tại map {target_map_id} "
+            f"[Tuần Tra] Đã dò hết toàn bộ {tong_so_khu} khu tại map {target_map_id} "
             f"({get_map_name(target_map_id)}). Chuyển sang map tiếp theo: {next_map} ({get_map_name(next_map)})!"
         )
         print(f"[*] {self.status_message}")
@@ -821,22 +871,34 @@ class BossHunter:
             self._attack_boss_like_tansat(my_char, boss_target)
 
     def _handle_reviving(self, my_char: Char) -> None:
-        """Hồi sinh sau khi bị đánh chết và tự động quay lại map Boss."""
-        # 1. Gửi lệnh hồi sinh về thành
+        """Hồi sinh sau khi bị đánh chết (mặc định bằng NGỌC tại chỗ) và tiếp tục săn Boss."""
+        # 1. Gửi lệnh hồi sinh
         is_dead = (my_char.cHPFull > 0 and my_char.cHP <= 0) or getattr(my_char, "statusMe", 1) == 14
         if is_dead:
-            self.status_message = "Nhân vật đã bị Boss hạ gục! Đang tự động hồi sinh về thành..."
-            if self.client and hasattr(self.client, "service"):
-                self.client.service.returnTownFromDead()
-            time.sleep(0.2)
+            if self.revive_mode == "gem":
+                self.status_message = "Nhân vật đã bị Boss hạ gục! Đang tự động hồi sinh bằng NGỌC tại chỗ..."
+                if self.client and hasattr(self.client, "service"):
+                    self.client.service.wakeUpFromDead()
+            else:
+                self.status_message = "Nhân vật đã bị Boss hạ gục! Đang tự động hồi sinh về thành..."
+                if self.client and hasattr(self.client, "service"):
+                    self.client.service.returnTownFromDead()
+            time.sleep(0.5)
             return
 
         # 2. Đã hồi sinh sống lại
         if my_char.cHP > 0:
             if self.current_boss and not self.current_boss.is_died:
-                self.status_message = f"Hồi sinh thành công! Tự động quay lại map {self.current_boss.map_id} đánh Boss '{self.current_boss.name}' tiếp!"
-                print(f"[*] {self.status_message}")
-                self._change_state(self.STATE_MOVING)
+                curr_map_id = getattr(my_char.mapInfo, "mapID", -1)
+                curr_zone_id = getattr(my_char.mapInfo, "zoneID", -1)
+                if curr_map_id == self.current_boss.map_id and (self.current_boss.zone_id == -1 or curr_zone_id == self.current_boss.zone_id):
+                    self.status_message = f"Hồi sinh bằng ngọc thành công tại chỗ! Tiếp tục đánh Boss '{self.current_boss.name}'!"
+                    print(f"[*] {self.status_message}")
+                    self._change_state(self.STATE_COMBAT)
+                else:
+                    self.status_message = f"Hồi sinh thành công! Tự động quay lại map {self.current_boss.map_id} đánh Boss '{self.current_boss.name}' tiếp!"
+                    print(f"[*] {self.status_message}")
+                    self._change_state(self.STATE_MOVING)
             else:
                 self._change_state(self.STATE_IDLE)
 
@@ -905,7 +967,7 @@ class BossHunter:
     def get_status(self) -> Dict[str, Any]:
         """Lấy toàn bộ trạng thái hoạt động của Auto Săn Boss."""
         delay_str = f"{self.min_scan_zone_delay:.2f}s - {self.max_scan_zone_delay:.2f}s (Random)" if self.min_scan_zone_delay != self.max_scan_zone_delay else f"{self.min_scan_zone_delay:.2f}s"
-        curr_patrol_map = self.FUTURE_PATROL_MAPS[self.patrol_map_index] if self.FUTURE_PATROL_MAPS else -1
+        curr_patrol_map = self.patrol_maps[self.patrol_map_index] if self.patrol_maps and self.patrol_map_index < len(self.patrol_maps) else -1
         return {
             "is_enabled": self.is_enabled,
             "state": self.state,
@@ -916,7 +978,10 @@ class BossHunter:
             "target_bosses": list(self.target_bosses),
             "auto_loot": self.auto_loot,
             "auto_revive": self.auto_revive,
-            "auto_patrol_future": self.auto_patrol_future,
+            "revive_mode": self.revive_mode,
+            "auto_patrol": self.auto_patrol,
+            "auto_patrol_future": self.auto_patrol,
+            "patrol_maps_count": len(self.patrol_maps),
             "patrol_map_id": curr_patrol_map,
             "patrol_map_name": get_map_name(curr_patrol_map) if curr_patrol_map != -1 else "",
             "min_scan_zone_delay": self.min_scan_zone_delay,

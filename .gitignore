@@ -25,3 +25,9 @@ ENV/
 
 # Thư mục mã nguồn C# gốc (chỉ đưa ClientNROpy vào git)
 Dragonboy
+
+# Build artifacts
+dist/
+*.dist/
+*.build/
+*.onefile-build/
