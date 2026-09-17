@@ -467,11 +467,18 @@ def interactive_cli(client: ClientNRO):
     print_cli_help()
     print("[+] ĐÃ SẴN SÀNG NHẬN LỆNH. Nhập 'help' để xem hướng dẫn hoặc 'exit' để thoát.\n")
 
-    while client.isConnected():
+    if not client.isConnected():
+        print("!" * 70)
+        print(" [!] CẢNH BÁO: Chưa kết nối được tới server game (hoặc kết nối đã bị đóng)!")
+        print("     Vui lòng kiểm tra lại IP/Port máy chủ hoặc kết nối mạng của VPS.")
+        print("     Bạn vẫn có thể gõ lệnh 'help', 'xmap path' hoặc 'exit' để thoát.")
+        print("!" * 70 + "\n")
+
+    while True:
         try:
             line = input("nro> ").strip()
         except (EOFError, KeyboardInterrupt):
-            print("\n[*] Ngắt kết nối từ bàn phím...")
+            print("\n[*] Đã thoát khỏi giao diện dòng lệnh.")
             break
 
         if not line:
@@ -1025,6 +1032,7 @@ def print_help():
     print("  --no-cli            Đăng nhập xong rồi thoát (không vào giao diện dòng lệnh).")
     print()
     print("Ví dụ:")
+    print("  ClientNRO.exe --help")
     print("  ClientNRO.exe --test-xmap")
     print("  ClientNRO.exe 51.79.163.109 12457 poopooi01 02082003 2.1.4")
     print("  ClientNRO.exe --xmap \"Đông Karin\"")

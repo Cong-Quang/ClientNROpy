@@ -1,8 +1,10 @@
 @echo off
 chcp 65001 >nul
-title ClientNROpy - C/C++ Native Auto-Compiler
+title ClientNROpy - Dong Goi 1 File Executable Duy Nhat Cho Windows va VPS
 echo ======================================================================
-echo    ClientNROpy - Trình Biên Dịch Tự Động Sang C/C++ Native (Anti-Decompile)
+echo    ClientNROpy - Trinh Dong Goi 1 File ClientNRO.exe Duy Nhat
+echo    Tuong thich: Windows 10, 11 va Windows Server 2012 R2, 2016, 2019, 2022
+echo    Ho tro Tieng Viet UTF-8 va khong bao gio bi tat man hinh dot ngot
 echo ======================================================================
 echo.
 
@@ -17,11 +19,10 @@ python "%~dp0build.py" %*
 
 if %errorlevel% neq 0 (
     echo.
-    echo [!] Build that bai voi ma loi %errorlevel%.
+    echo [!] Qua trinh dong goi that bai voi ma loi %errorlevel%.
     pause
     exit /b %errorlevel%
 )
 
 echo.
-echo [OK] Hoan tat thanh cong!
 pause

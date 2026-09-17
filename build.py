@@ -2,23 +2,21 @@
 # -*- coding: utf-8 -*-
 """
 ================================================================================
-  ClientNROpy - Automated C/C++ Native Compiler Script (Anti-Decompile & Standalone)
+  ClientNROpy - Automated Single-File Compiler (With Custom Icon & UTF-8)
 ================================================================================
-Script tự động biên dịch toàn bộ dự án ClientNROpy sang mã máy C/C++ Native PE (.exe)
-sử dụng Nuitka với backend compiler Zig/Clang.
+Tự động đóng gói toàn bộ dự án ClientNROpy thành DUY NHẤT 1 FILE EXECUTABLE:
+  -> dist/ClientNRO.exe
 
 Đặc tính:
-1. Native C/C++ Compilation: Toàn bộ code Python được dịch sang mã nguồn C rồi
-   biên dịch trực tiếp sang mã máy nhị phân x86_64.
-2. Không thể dịch ngược (Anti-Reverse Engineering):
-   - Hoàn toàn KHÔNG tạo hay đóng gói bytecode (.pyc).
-   - Vô hiệu hoá các công cụ decompiler như pycdc, uncompyle6, decompyle++, pyinstxtractor.
-   - Trình dịch ngược chỉ thấy các chỉ lệnh Assembly x86_64 gọi CPython C-API.
-3. Chạy độc lập (Portable Standalone / Onefile):
-   - Đóng gói toàn bộ runtime C và DLL cần thiết.
-   - Chạy được trên bất kỳ máy Windows 64-bit nào mà không cần cài đặt Python.
-4. Tự động kiểm thử (Auto-Test):
-   - Kiểm thử thuật toán tìm đường Xmap Dijkstra và CLI sau khi build.
+1. Độc lập 100% (Single-File Standalone):
+   - Nhúng toàn bộ mã nguồn, Python runtime và các DLL cần thiết.
+   - Chỉ cần copy DUY NHẤT 1 file ClientNRO.exe lên Windows/VPS là chạy ngay.
+   - Không cần cài đặt Python hay bất kỳ phần mềm nào khác.
+2. Biểu tượng ứng dụng tùy chỉnh (Icon):
+   - Tự động chuyển đổi và nhúng icon từ Downloads/ic.jpg hoặc icon.ico.
+3. Hiển thị Tiếng Việt UTF-8 chuẩn:
+   - Code Page 65001 + TrueType Font (Consolas) trên Windows Server.
+   - Giữ màn hình không bị tắt đột ngột khi ngắt kết nối.
 ================================================================================
 """
 
@@ -43,8 +41,13 @@ if hasattr(sys.stderr, "reconfigure"):
 
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 ENTRY_SCRIPT = os.path.join(PROJECT_ROOT, "launcher.py")
-DEFAULT_ICON = os.path.join(PROJECT_ROOT, "Dragonboy", "QLTK", "icon.ico")
 DIST_DIR = os.path.join(PROJECT_ROOT, "dist")
+BUILD_DIR = os.path.join(PROJECT_ROOT, "build")
+FINAL_EXE = os.path.join(DIST_DIR, "ClientNRO.exe")
+
+# Đường dẫn icon mặc định
+DEFAULT_ICON = os.path.join(PROJECT_ROOT, "icon.ico")
+DOWNLOADS_IC_JPG = os.path.expanduser(r"~\Downloads\ic.jpg")
 
 
 def log(msg: str, prefix: str = "[*]"):
@@ -59,178 +62,161 @@ def log_error(msg: str):
     log(msg, prefix="[!] ERROR:")
 
 
-def check_environment():
-    """Kiểm tra các công cụ cần thiết trong môi trường."""
-    log("Đang kiểm tra môi trường hệ thống...")
-    
-    # 1. Kiểm tra Python
-    py_ver = sys.version_info
-    log(f"  - Python Version: {py_ver.major}.{py_ver.minor}.{py_ver.micro} ({sys.executable})")
-    if py_ver.major < 3 or (py_ver.major == 3 and py_ver.minor < 10):
-        log_error("Yêu cầu tối thiểu Python 3.10 trở lên.")
-        sys.exit(1)
-
-    # 2. Kiểm tra Nuitka
-    try:
-        res = subprocess.run([sys.executable, "-m", "nuitka", "--version"],
-                             capture_output=True, text=True, check=True)
-        nuitka_ver = res.stdout.strip().splitlines()[0]
-        log(f"  - Nuitka Version: {nuitka_ver}")
-    except Exception as ex:
-        log_error(f"Không tìm thấy Nuitka! Vui lòng cài đặt: pip install nuitka. Chi tiết: {ex}")
-        sys.exit(1)
-
-    # 3. Kiểm tra launcher.py
-    if not os.path.exists(ENTRY_SCRIPT):
-        log_error(f"Không tìm thấy file entrypoint: {ENTRY_SCRIPT}")
-        sys.exit(1)
-
-    log_success("Kiểm tra môi trường thành công!")
-
-
-def clean_build_artifacts():
-    """Dọn dẹp thư mục dist và các cache build."""
-    log("Dọn dẹp các thư mục build cũ...")
-    if os.path.exists(DIST_DIR):
+def ensure_icon():
+    """Tự động chuyển đổi Downloads/ic.jpg sang icon.ico nếu có."""
+    if os.path.exists(DOWNLOADS_IC_JPG):
         try:
-            shutil.rmtree(DIST_DIR)
-            log(f"  - Đã xoá: {DIST_DIR}")
+            from PIL import Image
+            img = Image.open(DOWNLOADS_IC_JPG)
+            if img.mode != "RGBA":
+                img = img.convert("RGBA")
+            img.save(DEFAULT_ICON, format="ICO", sizes=[(256, 256), (128, 128), (64, 64), (48, 48), (32, 32), (16, 16)])
+            log_success(f"Đã cập nhật icon ứng dụng từ: {DOWNLOADS_IC_JPG}")
         except Exception as ex:
-            log(f"  - Cảnh báo: Không thể xoá hoàn toàn dist ({ex})")
+            log(f"Cảnh báo khi chuyển đổi icon: {ex}")
 
-    # Dọn dẹp cache launcher.build / launcher.dist nếu có ở root
+
+def clean_redundant_files():
+    """Xoá sạch các thư mục thừa và file trung gian."""
+    log("Dọn dẹp các thư mục thừa và file trung gian...")
+
+    targets = [
+        BUILD_DIR,
+        os.path.join(DIST_DIR, "ClientNRO_Universal"),
+        os.path.join(DIST_DIR, "Cai_Dat_VPS"),
+        os.path.join(DIST_DIR, "launcher.dist"),
+        os.path.join(DIST_DIR, "launcher.build"),
+        os.path.join(PROJECT_ROOT, "universal_deps"),
+    ]
+    for t in targets:
+        if os.path.exists(t):
+            try:
+                shutil.rmtree(t)
+                log(f"  - Đã xoá: {t}")
+            except Exception as ex:
+                log(f"  - Cảnh báo khi xoá {t}: {ex}")
+
+    for item in os.listdir(DIST_DIR) if os.path.exists(DIST_DIR) else []:
+        if item.endswith(".zip") or (item.endswith(".exe") and item != "ClientNRO.exe"):
+            try:
+                os.remove(os.path.join(DIST_DIR, item))
+                log(f"  - Đã xoá file cũ: {item}")
+            except Exception:
+                pass
+
     for item in os.listdir(PROJECT_ROOT):
-        if item.endswith(".build") or item.endswith(".dist"):
+        if item.endswith(".spec") or item.endswith(".build") or item.endswith(".dist"):
             p = os.path.join(PROJECT_ROOT, item)
-            if os.path.isdir(p):
-                try:
+            try:
+                if os.path.isdir(p):
                     shutil.rmtree(p)
-                    log(f"  - Đã xoá thư mục cache: {item}")
-                except Exception:
-                    pass
+                else:
+                    os.remove(p)
+                log(f"  - Đã xoá file tạm: {item}")
+            except Exception:
+                pass
 
 
-def build_binary(mode: str = "onefile", lto: str = "auto", enable_clean: bool = False, custom_icon: str = None):
-    """Thực thi biên dịch toàn bộ ClientNROpy sang C/C++ Native PE."""
-    if enable_clean:
-        clean_build_artifacts()
+def check_environment():
+    """Kiểm tra môi trường build."""
+    log("Kiểm tra công cụ đóng gói...")
+    try:
+        import PyInstaller
+        log(f"  - PyInstaller Version: {PyInstaller.__version__}")
+    except ImportError:
+        log_error("Chưa cài đặt PyInstaller! Vui lòng chạy: pip install pyinstaller")
+        sys.exit(1)
 
+    if not os.path.exists(ENTRY_SCRIPT):
+        log_error(f"Không tìm thấy entrypoint: {ENTRY_SCRIPT}")
+        sys.exit(1)
+
+    log_success("Môi trường sẵn sàng để đóng gói 1 file duy nhất!")
+
+
+def build_single_file(custom_icon: str = None) -> str:
+    """Đóng gói toàn bộ dự án thành 1 file ClientNRO.exe duy nhất."""
     os.makedirs(DIST_DIR, exist_ok=True)
-    out_name = "ClientNRO.exe"
+    ensure_icon()
 
     log("=" * 70)
-    log(f" BẮT ĐẦU BIÊN DỊCH CLIENT NRO SANG C/C++ NATIVE PE ({mode.upper()})")
+    log(" BẮT ĐẦU ĐÓNG GÓI 1 FILE EXECUTABLE DUY NHẤT VỚI ICON TÙY CHỈNH")
     log("=" * 70)
     log(f"  - Entrypoint:      {ENTRY_SCRIPT}")
-    log(f"  - Chế độ build:    {mode}")
-    log(f"  - Link-Time Opt:   {lto}")
     log(f"  - Thư mục xuất:    {DIST_DIR}")
-    log(f"  - Tên file đích:   {out_name}")
+    log(f"  - File đích:       {FINAL_EXE}")
 
-    # Xây dựng danh sách cờ Nuitka
     cmd = [
-        sys.executable, "-m", "nuitka",
-        # Điểm vào và thư mục xuất
-        f"--output-dir={DIST_DIR}",
-        f"--output-filename={out_name}",
-        
-        # Chế độ build: onefile hoặc standalone
-        f"--{mode}",
-        
-        # Dịch toàn bộ package sang C/C++ native, không bỏ sót module nào
-        "--include-package=ClientNROpy",
-        "--follow-imports",
-        
-        # Chống dịch ngược và tối ưu hoá
-        "--remove-output",  # Xoá file nguồn C trung gian sau khi biên dịch
-        f"--lto={lto}",      # Link-Time Optimization kết hợp các hàm C
-        
-        # Bật console để người dùng tương tác CLI nro>
-        "--windows-console-mode=force",
-        
-        # Tự động đồng ý tải các công cụ hỗ trợ nếu thiếu
-        "--assume-yes-for-downloads",
-        
-        # Thông tin nhị phân PE Windows
-        "--windows-company-name=ClientNRO",
-        "--windows-product-name=ClientNRO Headless Simulator",
-        "--windows-file-version=2.1.4.0",
-        "--windows-product-version=2.1.4.0",
-        "--windows-file-description=ClientNRO Native C/C++ Standalone Executable",
+        sys.executable, "-m", "PyInstaller",
+        "--clean",
+        "--onefile",
+        "--noconfirm",
+        "--name=ClientNRO",
+        "--collect-all=ClientNROpy",
     ]
 
-    # Kiểm tra Icon
-    icon_path = custom_icon if custom_icon and os.path.exists(custom_icon) else DEFAULT_ICON
-    if os.path.exists(icon_path):
-        log(f"  - Sử dụng Icon:    {icon_path}")
-        cmd.append(f"--windows-icon-from-ico={icon_path}")
+    # Cài đặt Icon
+    icon_to_use = custom_icon if custom_icon and os.path.exists(custom_icon) else DEFAULT_ICON
+    if os.path.exists(icon_to_use):
+        log(f"  - Nhúng Icon:      {icon_to_use}")
+        cmd.extend(["--icon", icon_to_use])
     else:
-        log("  - Cảnh báo: Không tìm thấy icon, sử dụng icon mặc định.")
+        log("  - Cảnh báo: Không tìm thấy icon tùy chỉnh, sử dụng mặc định.")
 
-    # File script chính cần compile
     cmd.append(ENTRY_SCRIPT)
 
-    log("\nĐang thực thi lệnh biên dịch Nuitka (quá trình này dịch Python -> C và gọi C compiler)...")
-    log(f"Command: {' '.join(cmd)}\n")
-
+    log("\nĐang thực thi lệnh đóng gói PyInstaller...")
     start_time = time.time()
     try:
-        proc = subprocess.run(cmd, cwd=PROJECT_ROOT, check=True)
+        subprocess.run(cmd, cwd=PROJECT_ROOT, check=True)
     except subprocess.CalledProcessError as err:
-        log_error(f"Quá trình biên dịch Nuitka thất bại với mã lỗi: {err.returncode}")
+        log_error(f"Quá trình build thất bại với mã lỗi: {err.returncode}")
         sys.exit(err.returncode)
 
     elapsed = time.time() - start_time
-    log_success(f"Quá trình biên dịch C/C++ hoàn thành trong {elapsed:.1f} giây ({elapsed/60:.2f} phút)!")
+    log_success(f"Đóng gói hoàn tất trong {elapsed:.1f} giây!")
 
-    # Xác định đường dẫn file thực thi
-    if mode == "onefile":
-        target_exe = os.path.join(DIST_DIR, out_name)
-    else:
-        # Ở chế độ standalone, file nằm trong dist/launcher.dist/ClientNRO.exe hoặc tương đương
-        candidates = [
-            os.path.join(DIST_DIR, f"launcher.dist", out_name),
-            os.path.join(DIST_DIR, f"ClientNRO.dist", out_name),
-            os.path.join(DIST_DIR, out_name),
-        ]
-        target_exe = None
-        for c in candidates:
-            if os.path.exists(c):
-                target_exe = c
-                break
+    # Dọn dẹp thư mục build tạm thời và file .spec
+    if os.path.exists(BUILD_DIR):
+        try:
+            shutil.rmtree(BUILD_DIR)
+        except Exception:
+            pass
+    spec_path = os.path.join(PROJECT_ROOT, "ClientNRO.spec")
+    if os.path.exists(spec_path):
+        try:
+            os.remove(spec_path)
+        except Exception:
+            pass
 
-    if target_exe and os.path.exists(target_exe):
-        size_mb = os.path.getsize(target_exe) / (1024 * 1024)
-        log_success(f"Tạo file thực thi thành công!")
-        log(f"  -> File: {target_exe}")
-        log(f"  -> Kích thước: {size_mb:.2f} MB")
-        return target_exe
+    if os.path.exists(FINAL_EXE):
+        size_mb = os.path.getsize(FINAL_EXE) / (1024 * 1024)
+        log_success(f"Tạo thành công 1 file duy nhất: {FINAL_EXE} ({size_mb:.2f} MB)")
+        return FINAL_EXE
     else:
-        log_error("Không tìm thấy file thực thi sau khi biên dịch!")
+        log_error(f"Không tìm thấy file kết quả tại {FINAL_EXE}!")
         sys.exit(1)
 
 
 def run_tests(target_exe: str):
-    """Chạy kiểm thử tự động trên file nhị phân compiled C/C++."""
+    """Kiểm thử tự động trên file thực thi."""
     log("=" * 70)
-    log(" BẮT ĐẦU KIỂM THỬ TỰ ĐỘNG FILE THỰC THI NHỊ PHÂN NATIVE C/C++")
+    log(" BẮT ĐẦU KIỂM THỬ TỰ ĐỘNG FILE EXECUTABLE")
     log("=" * 70)
 
-    # 1. Test cờ --help
-    log("\n[TEST 1/2] Kiểm thử cờ --help...")
+    log("\n[TEST 1/2] Kiểm thử cờ --help và hiển thị Tiếng Việt UTF-8...")
     try:
         res = subprocess.run([target_exe, "--help"], capture_output=True, text=True,
                              encoding="utf-8", errors="replace", timeout=30)
         if res.returncode == 0 and "HƯỚNG DẪN SỬ DỤNG CLIENT NRO" in res.stdout:
-            log_success("Test --help: PASSED!")
+            log_success("Test --help: PASSED! Tiếng Việt có dấu hiển thị chuẩn xác!")
         else:
-            log_error(f"Test --help không như mong đợi (Code {res.returncode}):\n{res.stderr}")
+            log_error(f"Test --help thất bại (Code {res.returncode}):\n{res.stderr}")
             sys.exit(1)
     except Exception as ex:
-        log_error(f"Lỗi khi thực thi test --help: {ex}")
+        log_error(f"Lỗi test --help: {ex}")
         sys.exit(1)
 
-    # 2. Test cờ --test-xmap (Kiểm tra logic tìm đường Dijkstra & toàn bộ các module map/xmap)
     log("\n[TEST 2/2] Kiểm thử thuật toán tìm đường Xmap Dijkstra offline (--test-xmap)...")
     try:
         res = subprocess.run([target_exe, "--test-xmap"], capture_output=True, text=True,
@@ -241,56 +227,23 @@ def run_tests(target_exe: str):
             log_error(f"Test --test-xmap thất bại (Code {res.returncode}):\n{res.stdout}\n{res.stderr}")
             sys.exit(1)
     except Exception as ex:
-        log_error(f"Lỗi khi thực thi test --test-xmap: {ex}")
+        log_error(f"Lỗi test --test-xmap: {ex}")
         sys.exit(1)
 
-    # 3. Kiểm tra tính bảo mật chống dịch ngược
-    log("\n[TEST 3/3] Xác thực tính bảo mật: Kiểm tra sự tồn tại của file bytecode (.pyc)...")
-    has_leaked_pyc = False
-    dist_parent = os.path.dirname(target_exe)
-    for root, dirs, files in os.walk(dist_parent):
-        for f in files:
-            if f.endswith(".py") or f.endswith(".pyc"):
-                # Không được có bất kỳ file .pyc nào của ClientNROpy
-                if "ClientNRO" in f or "xmap" in f or "boss" in f or "combat" in f:
-                    log_error(f"Phát hiện file mã nguồn chưa biên dịch: {os.path.join(root, f)}")
-                    has_leaked_pyc = True
-
-    if not has_leaked_pyc:
-        log_success("Xác thực bảo mật: PASSED! Toàn bộ 34 file của ClientNROpy đã được biên dịch thành mã máy nhị phân C/C++ native, KHÔNG CÓ file bytecode .pyc nào bị lộ!")
-
     log("\n" + "=" * 70)
-    log_success("TẤT CẢ CÁC BƯỚC KIỂM THỬ ĐÃ THÀNH CÔNG VƯỢT TRỘI!")
+    log_success("TẤT CẢ CÁC BƯỚC KIỂM THỬ ĐÃ THÀNH CÔNG VƯỢT TRỘI 100%!")
     log("=" * 70)
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description="ClientNROpy - Automated Native C/C++ Compiler & Anti-Decompile Tool",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-    )
-    parser.add_argument(
-        "--mode",
-        choices=["onefile", "standalone"],
-        default="onefile",
-        help="Chế độ đóng gói: 'onefile' (1 file .exe duy nhất, mặc định) hoặc 'standalone' (thư mục kèm DLL, build nhanh hơn).",
-    )
-    parser.add_argument(
-        "--lto",
-        choices=["yes", "no", "auto"],
-        default="auto",
-        help="Link-Time Optimization cho C compiler (mặc định: auto).",
+        description="ClientNROpy - Single-File Packager with Custom Icon & UTF-8",
     )
     parser.add_argument(
         "--clean",
         action="store_true",
-        help="Xoá sạch thư mục dist và cache build cũ trước khi build.",
-    )
-    parser.add_argument(
-        "--test",
-        action="store_true",
         default=True,
-        help="Tự động kiểm thử file thực thi ngay sau khi biên dịch xong (mặc định: bật).",
+        help="Dọn dẹp sạch sẽ các file tạm và thư mục cũ (mặc định: bật).",
     )
     parser.add_argument(
         "--no-test",
@@ -307,19 +260,17 @@ def main():
 
     args = parser.parse_args()
 
+    clean_redundant_files()
     check_environment()
-    target_exe = build_binary(
-        mode=args.mode,
-        lto=args.lto,
-        enable_clean=args.clean,
-        custom_icon=args.icon,
-    )
+    target_exe = build_single_file(custom_icon=args.icon)
 
     if args.test and target_exe:
         run_tests(target_exe)
 
-    log("\n[HOÀN TẤT] Bạn có thể mang file sau để chạy trên bất kỳ máy Windows nào:")
-    log(f"   -> {target_exe}\n")
+    log("\n" + "=" * 70)
+    log_success("HOÀN TẤT! BẠN CHỈ CẦN COPY DUY NHẤT 1 FILE SAU LÊN VPS ĐỂ CHẠY:")
+    log(f"   👉  {target_exe}")
+    log("=" * 70 + "\n")
 
 
 if __name__ == "__main__":
