@@ -68,6 +68,11 @@ RAW_LINK_MAPS_XMAP = """
 # Trái Đất - Khí Gas
 0 149 1 67 khí_gas
 
+# Làng Aru - Ngũ Hành Sơn (NPC 49 Đường Tăng, chọn Đồng ý)
+# Chỉ map 0 và map 123 có NPC này. Từ 122/124 phải đi bộ về 123 rồi mới NPC về 0.
+0 123 1 49 đồng_ý
+123 0 1 49 đồng_ý
+
 # Nhảy toạ độ Thần điện -> Tháp Karin -> Chân tháp
 45 46 3 576 552
 46 47 3 576 552
@@ -127,6 +132,12 @@ RAW_AUTO_LINK_MAPS_WAYPOINT = """
 
 # Khí Gas
 149 147 152 151 148
+
+# Siêu thị - Sân sau siêu thị (cổng đi bộ 2 chiều)
+84 104
+
+# Ngũ Hành Sơn (cổng đi bộ 2 chiều theo thứ tự 123-124-122)
+123 124 122
 """
 
 

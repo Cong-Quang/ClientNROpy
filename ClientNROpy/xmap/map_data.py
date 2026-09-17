@@ -212,6 +212,8 @@ GROUP_MAPS_DEF: List[Tuple[List[str], List[int]]] = [
     (["Potaufeu"], [139, 140]),
     (["Doanh trại", "Barracks"], [53, 58, 59, 60, 61, 62, 55, 56, 54, 57]),
     (["Khí Gas", "Gas"], [149, 147, 152, 151, 148]),
+    (["Ngũ Hành Sơn", "NHS"], [122, 123, 124]),
+    (["Siêu thị", "SieuThi"], [84, 104]),
 ]
 
 def normalize_str(s: str) -> str:
@@ -282,6 +284,16 @@ def resolve_map_id(query: Union[int, str], cgender: int = 0) -> Optional[int]:
     # 7. Alias Nhà Trunks / Tương lai
     if norm in ("tuong lai", "future", "nha trunks"):
         return 102
+
+    # 7b. Alias Ngũ Hành Sơn (122/123/124) và Sân sau siêu thị (104)
+    if norm in ("ngu hanh son", "nhs", "ngu hanh son 1", "nhs 1"):
+        return 122
+    if norm in ("ngu hanh son 2", "nhs 2"):
+        return 123
+    if norm in ("ngu hanh son 3", "nhs 3"):
+        return 124
+    if norm in ("san sau sieu thi", "san sau", "sieu thi sau"):
+        return 104
 
     # 8. Alias các map mới của TDStudio
     if norm in ("dia nguc", "hell"):
