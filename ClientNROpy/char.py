@@ -8,6 +8,7 @@ from .pet import Pet
 from .magic_tree import MagicTree
 from .map_info import MapInfo
 from .item import Item
+from .task import Task
 
 
 class Char:
@@ -25,6 +26,7 @@ class Char:
         self.cName: str = ""
         self.ctaskId: int = 0
         self.task_name: str = ""
+        self.task: Optional[Task] = None
         self.cgender: int = 0
         self.head: int = 0
         self.body: int = 0
@@ -82,6 +84,38 @@ class Char:
         self.itemFocus: Optional[Any] = None
         self.npcFocus: Optional[Any] = None
         self.skillTemplateId: int = 0
+
+    @property
+    def is_dead(self) -> bool:
+        """Kiểm tra nhân vật có đang trong trạng thái chết hay không."""
+        return (self.cHPFull > 0 and self.cHP <= 0) or getattr(self, "statusMe", 1) == 14 or getattr(self, "isDie", False)
+
+    @property
+    def taskMaint(self) -> Optional[Task]:
+        """Alias tương thích C# cho thông tin nhiệm vụ chính."""
+        return self.task
+
+    @property
+    def hp_potion(self) -> int:
+        """Tổng số hạt đậu thần đang có trong hành trang balo (template_id 13-22 hoặc type 6)."""
+        count = 0
+        for item in self.arrItemBag:
+            if item and (13 <= getattr(item, "template_id", -1) <= 22 or getattr(item, "template_type", -1) == 6):
+                count += getattr(item, "quantity", 1)
+        return count
+
+    def get_first_pean_item(self) -> Optional[Item]:
+        """Lấy vật phẩm đậu thần đầu tiên trong hành trang."""
+        for item in self.arrItemBag:
+            if item and (13 <= getattr(item, "template_id", -1) <= 22 or getattr(item, "template_type", -1) == 6):
+                return item
+        return None
+
+    def distance_to(self, x: int, y: int) -> float:
+        """Tính khoảng cách Euclidean từ nhân vật tới toạ độ (x, y)."""
+        import math
+        return math.hypot(self.cx - x, self.cy - y)
+
 
     def focus_mob(self, mob: Any) -> None:
         """Nhắm mục tiêu vào quái vật."""

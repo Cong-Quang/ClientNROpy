@@ -45,10 +45,13 @@ from .map_info import MapInfo
 from .char import Char
 from .chat_vip import ChatVip
 from .boss import Boss
+from .auto_manager import AutoManager
 from .boss_manager import BossManager
 from .boss_hunter import BossHunter
-from .combat_manager import CombatManager
 from .auto_quest_bomong import AutoQuest, AutoState, QuestInfo
+from .task import Task
+from .auto_train_pet import AutoTrainPet, AutoTrainPetMode, AutoTrainPetAttackMode
+from .auto_train_new_account import AutoTrainNewAccount
 
 # 4. Service, Controller và Client cấp cao
 from .service import Service
@@ -107,6 +110,11 @@ __all__ = [
     "AutoQuest",
     "AutoState",
     "QuestInfo",
+    "Task",
+    "AutoTrainPet",
+    "AutoTrainPetMode",
+    "AutoTrainPetAttackMode",
+    "AutoTrainNewAccount",
     "Service",
     "Controller",
     "ClientNRO",

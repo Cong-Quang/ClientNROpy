@@ -319,6 +319,8 @@ def print_cli_help():
     print("  ts / tansat [on|off|mob|pk] : Bật/Tắt tàn sát quái hoặc người chơi")
     print("  anhat                       : Bật / Tắt tự động nhặt đồ")
     print("  autohs [on|off|ngoc|ve]     : Bật / Tắt tự hồi sinh (Mặc định: BẬT bằng ngọc)")
+    print("  trainpet [normal|avoid|off] : Auto Úp đệ tử thông minh (Normal, Né siêu quái, Kaioken)")
+    print("  trainacc [on|off]           : Auto làm chuỗi nhiệm vụ tân thủ sơ sinh (NV 0 -> 11)")
     print("-" * 70)
     print("  [TỰ ĐỘNG KẾT NỐI LẠI (AUTO-RECONNECT)]")
     print("  reconnect [on|off]          : Bật / Tắt tự động kết nối lại khi mất mạng (Mặc định: BẬT)")

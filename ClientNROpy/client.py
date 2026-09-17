@@ -20,12 +20,7 @@ from .map_info import MapInfo
 from .player_data import PlayerData
 from .chat_vip import ChatVip
 from .boss import Boss
-from .boss_manager import BossManager
-from .boss_hunter import BossHunter
-from .combat_manager import CombatManager
-from .auto_quest_bomong import AutoQuest
-from .auto_revive_manager import AutoReviveManager
-from .auto_use_item_manager import AutoUseItemManager
+from .auto_manager import AutoManager
 from .xmap import XmapController, MapNext
 
 
@@ -64,26 +59,18 @@ class ClientNRO:
         # Bộ điều khiển tìm đường tự động Xmap
         self.xmap_controller: XmapController = XmapController(self)
 
-        # Bộ quản lý và săn Boss (Mod/Boss.cs)
-        self.boss_manager: BossManager = BossManager(self)
+        # Module Tự Động Hóa Hợp Nhất (Unified Auto Engine - 1 Worker Thread)
+        self.auto: AutoManager = AutoManager(self)
 
-        # Bộ điều khiển chiến đấu: Focus, Teleport, AK, Tàn Sát
-        self.combat_manager: CombatManager = CombatManager(self)
-
-        # Bộ máy tự động săn Boss hoàn chỉnh (BossHunter FSM)
-        self.boss_hunter: BossHunter = BossHunter(self)
-
-        # Auto nhiệm vụ Bò Mộng hằng ngày (AutoQuest FSM)
-        self.auto_quest: AutoQuest = AutoQuest(self)
-
-        # Shuttle tự động di chuyển qua lại 2 map (ShuttleManager)
-        self.shuttle_manager: ShuttleManager = ShuttleManager(self)
-
-        # Tự động hồi sinh khi chết (AutoReviveManager - Mặc định BẬT bằng ngọc)
-        self.auto_revive_manager: AutoReviveManager = AutoReviveManager(self)
-
-        # Tự động sử dụng vật phẩm theo chu kỳ thời gian (AutoUseItemManager)
-        self.auto_use_item_manager: AutoUseItemManager = AutoUseItemManager(self)
+        # Các thuộc tính bí danh giữ tương thích ngược 100%
+        self.combat_manager: AutoManager = self.auto
+        self.boss_manager: AutoManager = self.auto
+        self.boss_hunter: AutoManager = self.auto
+        self.auto_quest: AutoManager = self.auto
+        self.auto_quest_manager: AutoManager = self.auto
+        self.auto_revive_manager: AutoManager = self.auto
+        self.auto_use_item_manager: AutoManager = self.auto
+        self.shuttle_manager: AutoManager = self.auto
 
 
 
@@ -377,9 +364,7 @@ class ClientNRO:
     def is_dead(self) -> bool:
         """Kiểm tra nhân vật có đang trong trạng thái chết hay không."""
         c = self.myChar
-        if not c:
-            return False
-        return (c.cHPFull > 0 and c.cHP <= 0) or getattr(c, "statusMe", 1) == 14
+        return c.is_dead if c else False
 
     def revive(self, at_place: bool = False) -> Tuple[bool, str]:
         """
@@ -404,19 +389,19 @@ class ClientNRO:
 
     def get_auto_revive_status(self) -> dict:
         """Lấy thông tin trạng thái Auto Hồi Sinh."""
-        return self.auto_revive_manager.get_status()
+        return self.auto.get_auto_revive_status()
 
     def start_auto_use_item(self, item_id: int, interval_minutes: float) -> Tuple[bool, str]:
         """Bắt đầu tự động sử dụng item Template ID theo chu kỳ phút."""
-        return self.auto_use_item_manager.start_auto(item_id, interval_minutes)
+        return self.auto.start_auto_use_item(item_id, interval_minutes)
 
     def stop_auto_use_item(self) -> Tuple[bool, str]:
         """Dừng tự động dùng item."""
-        return self.auto_use_item_manager.stop()
+        return self.auto.stop_auto_use_item()
 
     def get_auto_use_item_status(self) -> dict:
         """Lấy thông tin trạng thái Auto dùng item."""
-        return self.auto_use_item_manager.get_status()
+        return self.auto.get_auto_use_item_status()
 
     # --------------------------------------------------------------------------
     # Các hàm quản lý và săn Boss (Mô phỏng Mod/Boss.cs)
@@ -499,7 +484,7 @@ class ClientNRO:
 
     def combat_status(self) -> Dict[str, Any]:
         """Lấy toàn bộ trạng thái cấu hình chiến đấu hiện tại."""
-        return self.combat_manager.get_status()
+        return self.auto.get_combat_status()
 
     # --------------------------------------------------------------------------
     # HỆ THỐNG AUTO SĂN BOSS HOÀN CHỈNH (AUTONOMOUS BOSS HUNTER)
@@ -566,99 +551,5 @@ class ClientNRO:
         """Lấy thông tin trạng thái shuttle hiện tại."""
         return self.shuttle_manager.get_status()
 
-
-class ShuttleManager:
-    """Quản lý tiến trình di chuyển liên tục qua lại giữa 2 map."""
-
-    def __init__(self, client: "ClientNRO"):
-        self.client: "ClientNRO" = client
-        self.is_running: bool = False
-        self.map_a: Optional[int] = None
-        self.map_b: Optional[int] = None
-        self.rounds: int = 0
-        self.legs_done: int = 0
-        self.current_target: Optional[int] = None
-        self.status_message: str = "Đã dừng"
-        self._thread: Optional[threading.Thread] = None
-        self._lock: threading.RLock = threading.RLock()
-
-    def start(self, map_a: int, map_b: int, rounds: int = 0) -> bool:
-        if map_a == map_b:
-            return False
-        with self._lock:
-            self.is_running = False
-            self.map_a = map_a
-            self.map_b = map_b
-            self.rounds = rounds
-            self.legs_done = 0
-            self.is_running = True
-            self.status_message = "Đang khởi động"
-            self._thread = threading.Thread(target=self._run_loop, daemon=True)
-            self._thread.start()
-            return True
-
-    def stop(self) -> None:
-        with self._lock:
-            self.is_running = False
-            self.status_message = "Đã dừng"
-
-    def get_status(self) -> Dict[str, Any]:
-        from .xmap.map_data import get_map_name
-        return {
-            "is_running": self.is_running,
-            "map_a": f"{get_map_name(self.map_a)} ({self.map_a})" if self.map_a is not None else "?",
-            "map_b": f"{get_map_name(self.map_b)} ({self.map_b})" if self.map_b is not None else "?",
-            "legs_done": self.legs_done,
-            "rounds": self.rounds,
-            "current_target": f"{get_map_name(self.current_target)} ({self.current_target})" if self.current_target is not None else "Không",
-            "status_message": self.status_message,
-        }
-
-    def _run_loop(self) -> None:
-        from .xmap.map_data import get_map_name
-        try:
-            time.sleep(0.5)
-            while self.is_running:
-                curr_map = self.client.myChar.mapInfo.mapID
-                # Quyết định map tiếp theo
-                if curr_map == self.map_a:
-                    target = self.map_b
-                elif curr_map == self.map_b:
-                    target = self.map_a
-                else:
-                    target = self.map_a
-
-                self.current_target = target
-                t_name = get_map_name(target)
-                self.status_message = f"Đang di chuyển tới {t_name} ({target})"
-                print(f"\n[Shuttle] >>> Lượt {self.legs_done + 1}: Chuyển map từ {curr_map} ({get_map_name(curr_map)}) tới {t_name} (ID: {target})...", flush=True)
-
-                self.client.xmap(target)
-                time.sleep(1.0)
-
-                # Chờ đến đích
-                while self.is_running:
-                    time.sleep(0.5)
-                    if self.client.myChar.mapInfo.mapID == target and not self.client.xmap_controller.is_acting:
-                        break
-
-                if not self.is_running:
-                    break
-
-                self.legs_done += 1
-                print(f"[Shuttle] [Lượt {self.legs_done}] Đã đến thành công {t_name} (ID: {target})!", flush=True)
-
-                if self.rounds > 0 and self.legs_done >= self.rounds:
-                    print(f"[Shuttle] Hoàn thành đủ {self.rounds} lượt!", flush=True)
-                    self.is_running = False
-                    self.status_message = f"Hoàn thành {self.rounds} lượt"
-                    break
-
-                time.sleep(2.0)
-        except Exception as ex:
-            print(f"[Shuttle] Lỗi ngoại lệ trong ShuttleManager: {ex}", flush=True)
-            import traceback
-            traceback.print_exc()
-            self.is_running = False
 
 

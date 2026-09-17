@@ -402,3 +402,48 @@ class Service:
         except Exception as ex:
             print(f"[Service] transportNow error: {ex}")
 
+    def upPotential(self, typePotential: int, num: int = 1) -> None:
+        """Tăng điểm tiềm năng (0: HP, 1: MP, 2: Sức đánh, 3: Giáp, 4: Chí mạng). cmd -30 sub 16."""
+        try:
+            m = Message(-30)
+            m.writer().writeByte(16)
+            m.writer().writeByte(typePotential)
+            m.writer().writeShort(num)
+            self.session.sendMessage(m)
+        except Exception as ex:
+            print(f"[Service] upPotential error: {ex}")
+
+    def getFlag(self, action: int, flagType: int = 0) -> None:
+        """Đổi cờ PK (cmd -103). action=1 để đổi cờ, flagType=8 là cờ đen."""
+        try:
+            m = Message(-103)
+            m.writer().writeByte(action)
+            if action != 0:
+                m.writer().writeByte(flagType)
+            self.session.sendMessage(m)
+        except Exception as ex:
+            print(f"[Service] getFlag error: {ex}")
+
+    def getItem(self, item_type: int, item_id: int) -> None:
+        """Nhận vật phẩm từ rương / nhiệm vụ ban đầu (cmd -40)."""
+        try:
+            m = Message(-40)
+            m.writer().writeByte(item_type)
+            m.writer().writeByte(item_id)
+            self.session.sendMessage(m)
+        except Exception as ex:
+            print(f"[Service] getItem error: {ex}")
+
+    def sendClientInput(self, inputs: Any) -> None:
+        """Gửi dữ liệu nhập ClientInput (cmd -125), ví dụ nhập mã code tân thủ."""
+        try:
+            if isinstance(inputs, str):
+                inputs = [inputs]
+            m = Message(-125)
+            m.writer().writeByte(len(inputs))
+            for inp in inputs:
+                m.writer().writeUTF(str(inp))
+            self.session.sendMessage(m)
+        except Exception as ex:
+            print(f"[Service] sendClientInput error: {ex}")
+

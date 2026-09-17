@@ -22,6 +22,7 @@ from .mob import Mob
 from .item_map import ItemMap
 from .service import Service
 from .chat_vip import ChatVip
+from .task import Task
 
 
 class Controller(IMessageHandler):
@@ -67,6 +68,10 @@ class Controller(IMessageHandler):
         self.on_mob_killed_callbacks: List[Callable[[int], None]] = []
         # Callback tàu vũ trụ / tàu thời gian (cmd -105: max_time, trans_type)
         self.on_transport_callbacks: List[Callable[[int, int], None]] = []
+        # Callback nhiệm vụ chính tuyến Task (cmd 40, 41, 43)
+        self.on_task_callbacks: List[Callable[[Task], None]] = []
+        # Callback tin nhắn chat từ đệ tử
+        self.on_pet_chat_callbacks: List[Callable[[str], None]] = []
         # Callback mất kết nối và kết nối thất bại
         self.on_disconnected_callbacks: List[Callable[[], None]] = []
         self.on_connection_fail_callbacks: List[Callable[[], None]] = []
@@ -358,6 +363,116 @@ class Controller(IMessageHandler):
                 logger.chat(f"[{char_id}]: {text}", account_tag=self.account_tag)
                 for cb in self.on_chat_callbacks:
                     cb(char_id, text)
+
+                # Kiểm tra nếu là chat từ đệ tử (ID âm của charID hoặc đệ kêu lười)
+                is_pet_chat = False
+                if self.myChar and self.myChar.charID != 0:
+                    if char_id == -self.myChar.charID:
+                        is_pet_chat = True
+                lower_text = text.lower()
+                if "lười" in lower_text or "luoi the" in lower_text or "lười thế" in lower_text:
+                    is_pet_chat = True
+
+                if is_pet_chat:
+                    for cb in self.on_pet_chat_callbacks:
+                        try:
+                            cb(text)
+                        except Exception:
+                            pass
+                return
+
+            # ------------------------------------------------------------------
+            # 5b. NHIỆM VỤ CHÍNH TUYẾN TASK (cmd 40, 41, 43)
+            # ------------------------------------------------------------------
+            if cmd == 40:
+                try:
+                    task_id = msg.reader().readShort()
+                    index = msg.reader().readByte()
+                    name = msg.reader().readUTF()
+                    detail = msg.reader().readUTF()
+                    n_sub = msg.reader().readByte()
+                    sub_names = []
+                    sub_tasks = []
+                    map_tasks = []
+                    content_info = []
+                    for _ in range(n_sub):
+                        s_name = msg.reader().readUTF()
+                        s_type = msg.reader().readByte()
+                        m_id = msg.reader().readShort()
+                        c_info = msg.reader().readUTF()
+                        sub_names.append(s_name)
+                        sub_tasks.append(s_type)
+                        map_tasks.append(m_id)
+                        content_info.append(c_info)
+
+                    count = -1
+                    counts = []
+                    try:
+                        count = msg.reader().readShort()
+                        for _ in range(n_sub):
+                            counts.append(msg.reader().readShort())
+                    except Exception:
+                        pass
+
+                    new_task = Task(
+                        task_id=task_id,
+                        index=index,
+                        name=name,
+                        detail=detail,
+                        sub_names=sub_names,
+                        counts=counts,
+                        count=count,
+                        content_info=content_info,
+                        map_tasks=map_tasks,
+                        task_types=sub_tasks,
+                    )
+                    self.myChar.task = new_task
+                    self.myChar.ctaskId = task_id
+                    self.myChar.task_name = name
+
+                    from .logger import logger
+                    logger.system(f"Nhận nhiệm vụ: [{task_id}] {name} (Bước {index + 1}/{max(1, n_sub)})", account_tag=self.account_tag)
+
+                    for cb in self.on_task_callbacks:
+                        try:
+                            cb(new_task)
+                        except Exception:
+                            pass
+                except Exception as ex:
+                    from .logger import logger
+                    logger.debug(f"[Controller] CMD 40 TASK_GET error: {ex}", account_tag=self.account_tag)
+                return
+
+            if cmd == 41:
+                try:
+                    if self.myChar.task:
+                        self.myChar.task.index += 1
+                        self.myChar.task.count = 0
+                        from .logger import logger
+                        logger.system(f"Nhiệm vụ bước tiếp theo: Bước {self.myChar.task.index + 1}", account_tag=self.account_tag)
+                        for cb in self.on_task_callbacks:
+                            try:
+                                cb(self.myChar.task)
+                            except Exception:
+                                pass
+                except Exception as ex:
+                    from .logger import logger
+                    logger.debug(f"[Controller] CMD 41 TASK_NEXT error: {ex}", account_tag=self.account_tag)
+                return
+
+            if cmd == 43:
+                try:
+                    count = msg.reader().readShort()
+                    if self.myChar.task:
+                        self.myChar.task.count = count
+                        for cb in self.on_task_callbacks:
+                            try:
+                                cb(self.myChar.task)
+                            except Exception:
+                                pass
+                except Exception as ex:
+                    from .logger import logger
+                    logger.debug(f"[Controller] CMD 43 TASK_UPDATE error: {ex}", account_tag=self.account_tag)
                 return
 
             # ------------------------------------------------------------------

@@ -406,6 +406,42 @@ def execute_client_command(client: ClientNRO, line: str) -> bool:
         logger.system(f"Kích hoạt Macro Goto: {' -> '.join(chain)}", account_tag=tag)
         client.execute_chain(chain)
 
+    elif cmd in ("trainpet", "upde", "autode", "petauto"):
+        if not args or args[0].lower() in ("status", "st", "info"):
+            tp = client.auto.train_pet
+            print(f"\n=== TRẠNG THÁI AUTO ÚP ĐỆ TỬ [{tag}] ===")
+            print(f"- Hoạt động:             {'ĐANG BẬT [ON]' if tp.is_enabled else 'ĐÃ TẮT [OFF]'}")
+            print(f"- Chế độ:                {tp.mode.name}")
+            print(f"- Đánh khi đệ lười:      {tp.attack_mode.name}\n")
+            print("Cú pháp: trainpet [normal|avoid|kaioken|off]")
+            print("         trainpet atk [mob|pet|me]")
+        elif args[0].lower() in ("off", "stop", "0", "tat"):
+            ok, msg = client.auto.stop_train_pet()
+            logger.system(msg, account_tag=tag)
+        elif args[0].lower() in ("atk", "attack"):
+            sub_atk = args[1].lower() if len(args) > 1 else "mob"
+            ok, msg = client.auto.set_train_pet_attack_mode(sub_atk)
+            logger.system(msg, account_tag=tag)
+        else:
+            mode_arg = args[0].lower()
+            ok, msg = client.auto.start_train_pet(mode_arg)
+            logger.system(msg, account_tag=tag)
+
+    elif cmd in ("trainacc", "newacc", "autonewacc", "nvts"):
+        if not args or args[0].lower() in ("on", "start", "1"):
+            ok, msg = client.auto.start_train_new_account()
+            logger.system(msg, account_tag=tag)
+        elif args[0].lower() in ("off", "stop", "0", "tat"):
+            ok, msg = client.auto.stop_train_new_account()
+            logger.system(msg, account_tag=tag)
+        elif args[0].lower() in ("status", "st", "info"):
+            tna = client.auto.train_new_acc
+            print(f"\n=== TRẠNG THÁI AUTO TÂN THỦ SƠ SINH [{tag}] ===")
+            print(f"- Hoạt động:             {'ĐANG BẬT [ON]' if tna.is_enabled else 'ĐÃ TẮT [OFF]'}")
+            print(f"- Nhiệm vụ hiện tại:     Task ID {client.myChar.ctaskId}\n")
+        else:
+            print("Cú pháp: trainacc [on|off|status]")
+
     else:
         print(f"Không rõ lệnh '{cmd}'. Gõ 'help' để xem danh sách lệnh.")
 
