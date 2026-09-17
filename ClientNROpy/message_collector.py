@@ -68,7 +68,8 @@ class MessageCollector:
             self.session.curR = 0
             self.session.curW = 0
             self.session.getKeyComplete = True
-            print(f"[Session_ME] getKey complete! Key length: {len(self.session.key)}")
+            from .logger import logger
+            logger.debug(f"[Session_ME] getKey complete! Key length: {len(self.session.key)}")
 
             try:
                 message.reader().readUTF()
@@ -77,7 +78,8 @@ class MessageCollector:
             except Exception:
                 pass
         except Exception as ex:
-            print(f"[Session_ME] getKey failed: {ex}")
+            from .logger import logger
+            logger.error(f"[Session_ME] getKey failed: {ex}")
 
     def readMessage2(self, cmd: int) -> Message:
         """Đọc gói tin kích thước lớn với 3 byte length."""

@@ -144,6 +144,18 @@ class BossHunter:
             self._thread = threading.Thread(target=self._worker_loop, daemon=True, name="BossHunterThread")
             self._thread.start()
 
+    def _log(self, msg: str, is_important: bool = False, is_alert: bool = False) -> None:
+        """Ghi log phân loại qua ConsoleLogger với tag tài khoản."""
+        self.status_message = msg
+        from .logger import logger
+        tag = getattr(self.client, "account_id", "BossHunter") if self.client else "BossHunter"
+        if is_alert:
+            logger.alert(msg, account_tag=tag)
+        elif is_important:
+            logger.boss(msg, account_tag=tag)
+        else:
+            logger.auto(msg, account_tag=tag)
+
     # --------------------------------------------------------------------------
     # ĐIỀU KHIỂN & CẤU HÌNH API
     # --------------------------------------------------------------------------
@@ -155,18 +167,16 @@ class BossHunter:
                 self.add_target(t)
         self.is_enabled = True
         self.state = self.STATE_IDLE
-        self.status_message = "Đã kích hoạt Auto Săn Boss!"
-        print(f"[*] {self.status_message}")
+        self._log("Đã kích hoạt Auto Săn Boss!")
 
     def stop(self) -> None:
         """Dừng tính năng Auto Săn Boss."""
         self.is_enabled = False
         self.state = self.STATE_IDLE
         self.current_boss = None
-        self.status_message = "Đã dừng Auto Săn Boss."
         if self.client and hasattr(self.client, "xmap_stop"):
             self.client.xmap_stop()
-        print(f"[*] {self.status_message}")
+        self._log("Đã dừng Auto Săn Boss.")
 
     def toggle(self) -> bool:
         """Bật / Tắt tính năng Auto Săn Boss."""
@@ -292,7 +302,7 @@ class BossHunter:
                     self._step()
             except Exception as ex:
                 if getattr(self.client, "debug", False):
-                    print(f"[BossHunter] worker error: {ex}")
+                    self._log(f"Worker error: {ex}", is_alert=True)
             time.sleep(0.15)
 
     def _on_server_message(self, text: str) -> None:
@@ -331,7 +341,7 @@ class BossHunter:
                 elif self.state != self.STATE_LOOTING:
                     killer_str = f" bởi '{self.current_boss.killer}'" if self.current_boss.killer else ""
                     self.status_message = f"Boss '{self.current_boss.name}' đã bị hạ{killer_str}. Đổi mục tiêu!"
-                    print(f"[*] {self.status_message}")
+                    self._log(self.status_message, is_important=True)
                     self.current_boss = None
                     self._change_state(self.STATE_IDLE)
                     return
@@ -376,7 +386,7 @@ class BossHunter:
             self.current_boss = next_boss
             self.scanned_zones.clear()
             self.status_message = f"Phát hiện mục tiêu: '{next_boss.name}' tại '{next_boss.map_name}' [{next_boss.map_id}]. Bắt đầu di chuyển!"
-            print(f"[*] {self.status_message}")
+            self._log(self.status_message, is_important=True)
             self._change_state(self.STATE_MOVING)
             my_char = self._get_my_char()
             if my_char:
@@ -388,7 +398,7 @@ class BossHunter:
                     self.patrol_map_index = 0
                 curr_map = self.patrol_maps[self.patrol_map_index]
                 self.status_message = f"Đang rảnh rỗi (chưa có Boss mục tiêu). Bắt đầu tuần tra map {curr_map} ({get_map_name(curr_map)})..."
-                print(f"[*] {self.status_message}")
+                self._log(self.status_message)
                 self._change_state(self.STATE_PATROL)
             else:
                 self.status_message = "Đang chờ Boss xuất hiện hoặc có Boss trong danh sách cấu hình..."
@@ -415,7 +425,7 @@ class BossHunter:
         # Đã tới đúng map của Boss
         if curr_map_id == self.current_boss.map_id:
             self.status_message = f"Đã tới map '{self.current_boss.map_name}' [{self.current_boss.map_id}]. Bắt đầu quét khu vực!"
-            print(f"[*] {self.status_message}")
+            self._log(self.status_message)
             self._change_state(self.STATE_SCANNING)
             return
 
@@ -458,7 +468,7 @@ class BossHunter:
         if boss_char is not None:
             self.current_boss.zone_id = khu_hien_tai
             self.status_message = f"ĐÃ TÌM THẤY BOSS '{self.current_boss.name}' tại Khu {khu_hien_tai}! Bắt đầu chiến đấu!"
-            print(f"[!] >>> {self.status_message}")
+            self._log(self.status_message, is_important=True)
             self._change_state(self.STATE_COMBAT)
             return
 
@@ -496,7 +506,7 @@ class BossHunter:
             #     đổi_khu(khu)
             #     sleep(0.5)
             retries = 0
-            max_retries = 8  # Thử tối đa 4 giây (8 * 0.5s) tránh lặp vô tận nếu khu bị đầy
+            max_retries = 3  # Thử 3 lần giãn cách 1.5s (~4.5s) tuân thủ cooldown 4s của server
             self._zone_blocked_by_quest = False
             while self.is_enabled and getattr(my_char.mapInfo, "zoneID", -1) != khu:
                 if not self.current_boss or self.current_boss.is_died:
@@ -504,23 +514,23 @@ class BossHunter:
 
                 # Nếu nhận thông báo "Khu vực đang có boss được hỗ trợ / Bạn không thể vào lúc này"
                 if self._zone_blocked_by_quest:
-                    print(f"[*] [BossHunter] Khu {khu} đang có Boss được hỗ trợ nhiệm vụ (không thể vào). Bỏ qua khu {khu} tạm thời!")
+                    self._log(f"Khu {khu} đang có Boss được hỗ trợ nhiệm vụ. Bỏ qua tạm thời!")
                     self._zone_blocked_by_quest = False
                     break
 
                 self.status_message = f"Đang dò Boss '{self.current_boss.name}': đổi sang Khu {khu} (lần {retries + 1})..."
                 if self.client and hasattr(self.client, "change_zone"):
                     self.client.change_zone(khu)
-                time.sleep(0.5)
+                time.sleep(1.5)
                 retries += 1
 
                 if self._zone_blocked_by_quest:
-                    print(f"[*] [BossHunter] Khu {khu} đang có Boss được hỗ trợ nhiệm vụ (không thể vào). Bỏ qua khu {khu} tạm thời!")
+                    self._log(f"Khu {khu} đang có Boss được hỗ trợ nhiệm vụ. Bỏ qua tạm thời!")
                     self._zone_blocked_by_quest = False
                     break
 
                 if retries >= max_retries:
-                    print(f"[BossHunter] Không thể vào Khu {khu} (có thể khu đầy). Chuyển khu tiếp theo.")
+                    self._log(f"Không thể vào Khu {khu} (có thể khu đầy). Chuyển khu tiếp theo.")
                     break
 
             if getattr(my_char.mapInfo, "zoneID", -1) != khu:
@@ -538,14 +548,14 @@ class BossHunter:
             if boss_char is not None:
                 self.current_boss.zone_id = khu
                 self.status_message = f"ĐÃ TÌM THẤY BOSS '{self.current_boss.name}' tại Khu {khu}! Bắt đầu chiến đấu!"
-                print(f"[!] >>> {self.status_message}")
+                self._log(self.status_message, is_important=True)
                 self._change_state(self.STATE_COMBAT)
                 return
 
         # END FOR
         # Đã quét toàn bộ khu mà không thấy Boss -> Boss đã bị hạ hoặc biến mất
         self.status_message = f"Đã quét toàn bộ {tong_so_khu} khu map {self.current_boss.map_id} không thấy Boss '{self.current_boss.name}'. Đánh dấu Boss đã chết!"
-        print(f"[*] {self.status_message}")
+        self._log(self.status_message)
         self.current_boss.is_died = True
         self.current_boss = None
         self._change_state(self.STATE_IDLE)
@@ -566,7 +576,7 @@ class BossHunter:
             self.current_boss = next_boss
             self.scanned_zones.clear()
             self.status_message = f"Phát hiện thông báo Boss '{next_boss.name}' tại '{next_boss.map_name}' [{next_boss.map_id}]! Dừng tuần tra, bắt đầu di chuyển!"
-            print(f"[!] >>> {self.status_message}")
+            self._log(self.status_message, is_important=True)
             self._change_state(self.STATE_MOVING)
             return
 
@@ -586,7 +596,7 @@ class BossHunter:
                 xmap_st = self.client.xmap_status()
                 if not xmap_st.get("is_acting", False):
                     self.status_message = f"[Tuần Tra] Đang di chuyển tới map {target_map_id} ({get_map_name(target_map_id)})..."
-                    print(f"[*] {self.status_message}")
+                    self._log(self.status_message)
                     self.client.xmap(target_map_id)
             return
 
@@ -628,7 +638,7 @@ class BossHunter:
                 continue
 
             retries = 0
-            max_retries = 8
+            max_retries = 3  # Thử 3 lần giãn cách 1.5s (~4.5s) tuân thủ cooldown 4s của server
             self._zone_blocked_by_quest = False
             while self.is_enabled and getattr(my_char.mapInfo, "zoneID", -1) != khu:
                 if self._select_next_boss() is not None:
@@ -636,18 +646,18 @@ class BossHunter:
                     return
 
                 if self._zone_blocked_by_quest:
-                    print(f"[*] [Tuần Tra] Khu {khu} có boss được hỗ trợ nhiệm vụ (không thể vào). Bỏ qua khu {khu} tạm thời!")
+                    self._log(f"[Tuần Tra] Khu {khu} có boss được hỗ trợ nhiệm vụ. Bỏ qua tạm thời!")
                     self._zone_blocked_by_quest = False
                     break
 
                 self.status_message = f"[Tuần Tra] Dò map {target_map_id} ({get_map_name(target_map_id)}): đổi sang Khu {khu}..."
                 if self.client and hasattr(self.client, "change_zone"):
                     self.client.change_zone(khu)
-                time.sleep(0.5)
+                time.sleep(1.5)
                 retries += 1
 
                 if self._zone_blocked_by_quest:
-                    print(f"[*] [Tuần Tra] Khu {khu} có boss được hỗ trợ nhiệm vụ (không thể vào). Bỏ qua khu {khu} tạm thời!")
+                    self._log(f"[Tuần Tra] Khu {khu} có boss được hỗ trợ nhiệm vụ. Bỏ qua tạm thời!")
                     self._zone_blocked_by_quest = False
                     break
 
@@ -673,7 +683,7 @@ class BossHunter:
             f"[Tuần Tra] Đã dò hết toàn bộ {tong_so_khu} khu tại map {target_map_id} "
             f"({get_map_name(target_map_id)}). Chuyển sang map tiếp theo: {next_map} ({get_map_name(next_map)})!"
         )
-        print(f"[*] {self.status_message}")
+        self._log(self.status_message)
         if self.client and hasattr(self.client, "xmap"):
             self.client.xmap(next_map)
 
@@ -714,7 +724,7 @@ class BossHunter:
             is_died=False,
         )
         self.status_message = f"ĐÃ TÌM THẤY BOSS '{boss_name}' tại Map {map_id} Khu {zone_id}! Bắt đầu chiến đấu!"
-        print(f"[!] >>> {self.status_message}")
+        self._log(self.status_message, is_important=True)
         self._change_state(self.STATE_COMBAT)
 
     def _find_boss_in_current_map(self, my_char: Char) -> Optional[Any]:
@@ -791,7 +801,7 @@ class BossHunter:
             self.current_boss.killer = boss.killer
             if self.state == self.STATE_COMBAT:
                 killer_str = f" bởi '{boss.killer}'" if boss.killer else ""
-                print(f"[!] >>> Server thông báo: Boss '{boss.name}' đã bị tiêu diệt{killer_str}! Bắt đầu nhặt đồ...")
+                self._log(f"Server thông báo: Boss '{boss.name}' đã bị tiêu diệt{killer_str}! Bắt đầu nhặt đồ...", is_important=True)
                 if self.auto_loot:
                     self._change_state(self.STATE_LOOTING)
                     self.looting_start_time = time.time()
@@ -829,10 +839,10 @@ class BossHunter:
         # Nếu Boss không còn trong map hoặc đã bị hạ (HP <= 0 / isDie / statusMe == 14)
         if boss_target is None or not self._is_boss_alive(boss_target):
             self.status_message = f"Boss '{self.current_boss.name}' đã bị tiêu diệt!"
-            print(f"[!] >>> {self.status_message}")
+            self._log(self.status_message, is_important=True)
             self.current_boss.is_died = True
             if self.auto_loot:
-                print(f"[*] Chuyển sang trạng thái NHẶT ĐỒ BOSS RƠI...")
+                self._log("Chuyển sang trạng thái NHẶT ĐỒ BOSS RƠI...", is_important=True)
                 self._change_state(self.STATE_LOOTING)
                 self.looting_start_time = time.time()
             else:
@@ -893,11 +903,11 @@ class BossHunter:
                 curr_zone_id = getattr(my_char.mapInfo, "zoneID", -1)
                 if curr_map_id == self.current_boss.map_id and (self.current_boss.zone_id == -1 or curr_zone_id == self.current_boss.zone_id):
                     self.status_message = f"Hồi sinh bằng ngọc thành công tại chỗ! Tiếp tục đánh Boss '{self.current_boss.name}'!"
-                    print(f"[*] {self.status_message}")
+                    self._log(self.status_message)
                     self._change_state(self.STATE_COMBAT)
                 else:
                     self.status_message = f"Hồi sinh thành công! Tự động quay lại map {self.current_boss.map_id} đánh Boss '{self.current_boss.name}' tiếp!"
-                    print(f"[*] {self.status_message}")
+                    self._log(self.status_message)
                     self._change_state(self.STATE_MOVING)
             else:
                 self._change_state(self.STATE_IDLE)
@@ -944,7 +954,7 @@ class BossHunter:
 
         # Hoàn tất nhặt đồ hoặc hết thời gian chờ
         self.status_message = "Đã hoàn tất nhặt đồ Boss rơi! Chuyển sang mục tiêu Boss tiếp theo."
-        print(f"[*] {self.status_message}")
+        self._log(self.status_message)
         self.current_boss = None
         self.last_boss_pos = None
         self._change_state(self.STATE_IDLE)

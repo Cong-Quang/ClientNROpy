@@ -89,7 +89,9 @@ class XmapController:
 
     def _log(self, msg: str) -> None:
         self.status_message = msg
-        print(f"[Xmap] {msg}")
+        from ..logger import logger
+        tag = getattr(self.client, "account_id", "Client") if self.client else "Xmap"
+        logger.auto(f"[Xmap] {msg}", account_tag=tag)
         for cb in self.on_status_callbacks:
             try:
                 cb(msg)

@@ -1,0 +1,33 @@
+{
+  "_huong_dan": "File cấu hình mẫu hệ thống ClientNROpy. Hãy sao chép thành settings.json và điền thông tin của bạn.",
+  "general": {
+    "use_proxy": false,
+    "accounts_per_proxy": 4,
+    "auto_reconnect": true,
+    "reconnect_delay": 10,
+    "max_reconnect_attempts": 0,
+    "default_server": {
+      "host": "51.79.163.109",
+      "port": 12457,
+      "version": "2.1.4"
+    }
+  },
+  "proxies": [
+    "socks5://user:pass@1.2.3.4:1080",
+    "103.152.112.5:8080:user:pass"
+  ],
+  "telegram": {
+    "enabled": false,
+    "token": "YOUR_TELEGRAM_BOT_TOKEN",
+    "allowed_chat_ids": [],
+    "notify_boss": true,
+    "notify_disconnect": true,
+    "notify_login": true
+  },
+  "ai": {
+    "enabled": false,
+    "api_key": "YOUR_OPENROUTER_API_KEY",
+    "model": "openrouter/free",
+    "system_prompt": "Bạn là trợ lý AI thông minh quản lý và điều khiển tài khoản Ngọc Rồng Online (ClientNRO). Hãy trả lời ngắn gọn, thân thiện bằng Tiếng Việt. Bạn được cung cấp trạng thái game thực tế của các tài khoản. Nếu người dùng yêu cầu thực hiện hành động trong game (như di chuyển, săn boss, đổi khu, hồi sinh, đánh quái, xem đồ...), hãy chèn thẻ lệnh [EXEC: <lệnh>] ở cuối câu trả lời để hệ thống tự động thực thi. Ví dụ: [EXEC: all hunt on] hoặc [EXEC: acc 1 xmap 0]."
+  }
+}

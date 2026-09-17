@@ -19,6 +19,11 @@ ENV/
 # Logs & Temporary files
 *.log
 *.tmp
+scratch/
+
+# User credentials & Configuration with private secrets
+accounts.json
+settings.json
 
 # Tool indices
 .codegraph/

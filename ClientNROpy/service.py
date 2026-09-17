@@ -5,7 +5,7 @@ Mô phỏng chính xác Service.cs trong C#.
 Cung cấp các hàm đóng gói Message và gửi qua Session_ME.
 """
 
-from typing import Optional, List
+from typing import Optional, List, Any
 from .message import Message
 from .session import Session_ME
 from .char import Char
@@ -19,9 +19,23 @@ class Service:
 
     instance: Optional["Service"] = None
 
-    def __init__(self):
-        self.session: Session_ME = Session_ME.gI()
+    def __init__(self, session: Optional["Session_ME"] = None, client: Optional[Any] = None):
+        self.session: Session_ME = session if session is not None else Session_ME.gI()
+        self.client: Optional[Any] = client
         self.version: str = "2.1.4"
+
+    @property
+    def myChar(self):
+        if self.client and hasattr(self.client, "myChar") and self.client.myChar is not None:
+            return self.client.myChar
+        from .char import Char
+        return Char.myCharz()
+
+    @property
+    def account_tag(self) -> str:
+        if self.client and hasattr(self.client, "account_id") and self.client.account_id:
+            return self.client.account_id
+        return "Client"
 
     @classmethod
     def gI(cls) -> "Service":
@@ -51,7 +65,8 @@ class Service:
             m = self.messageNotMap(13)
             self.session.sendMessage(m)
         except Exception as ex:
-            print(f"[Service] clientOk error: {ex}")
+            from .logger import logger
+            logger.error(f"clientOk error: {ex}", account_tag=self.account_tag)
 
     def setClientType(self, typeClient: int = 4, zoomLevel: int = 2) -> None:
         """Khai báo cấu hình máy khách (mặc định PC headless)."""
@@ -67,7 +82,8 @@ class Service:
             m.writer().writeUTF(f"Pc platform xxx|{self.version}")
             self.session.sendMessage(m)
         except Exception as ex:
-            print(f"[Service] setClientType error: {ex}")
+            from .logger import logger
+            logger.error(f"setClientType error: {ex}", account_tag=self.account_tag)
 
     def getResource(self, action: int = 3, vResourceIndex: Optional[List[int]] = None) -> None:
         """
@@ -83,15 +99,21 @@ class Service:
                     m.writer().writeShort(idx)
             self.session.sendMessage(m)
         except Exception as ex:
-            print(f"[Service] getResource error: {ex}")
+            from .logger import logger
+            logger.error(f"getResource error: {ex}", account_tag=self.account_tag)
 
     def login(self, username: str, password: str, version: Optional[str] = None, type_login: int = 0) -> None:
         """Gửi gói tin đăng nhập tài khoản."""
         try:
             ver = version or self.version
-            from .controller import Controller
-            Controller.gI().last_login_creds = (username, password, ver)
-            print(f"[Service] Logging in as '{username}' (version {ver})...")
+            if self.client and hasattr(self.client, "controller") and self.client.controller:
+                self.client.controller.last_login_creds = (username, password, ver)
+            else:
+                from .controller import Controller
+                Controller.gI().last_login_creds = (username, password, ver)
+
+            from .logger import logger
+            logger.system(f"Đang đăng nhập tài khoản '{username}' (phiên bản {ver})...", account_tag=self.account_tag)
             m = self.messageNotLogin(0)
             m.writer().writeUTF(username)
             m.writer().writeUTF(password)
@@ -99,18 +121,21 @@ class Service:
             m.writer().writeByte(type_login)
             self.session.sendMessage(m)
         except Exception as ex:
-            print(f"[Service] login error: {ex}")
+            from .logger import logger
+            logger.error(f"login error: {ex}", account_tag=self.account_tag)
 
     def selectCharToPlay(self, charname: str) -> None:
         """Chọn nhân vật để vào thế giới game."""
         try:
-            print(f"[Service] Selecting character '{charname}' to enter game...")
+            from .logger import logger
+            logger.system(f"Chọn nhân vật '{charname}' để vào thế giới game...", account_tag=self.account_tag)
             m = Message(-28)
             m.writer().writeByte(1)
             m.writer().writeUTF(charname)
             self.session.sendMessage(m)
         except Exception as ex:
-            print(f"[Service] selectCharToPlay error: {ex}")
+            from .logger import logger
+            logger.error(f"selectCharToPlay error: {ex}", account_tag=self.account_tag)
 
     def charMove(self, cx: int, cy: int, flying: bool = False) -> None:
         """Gửi tọa độ di chuyển nhân vật."""
@@ -120,10 +145,11 @@ class Service:
             m.writer().writeShort(cx)
             m.writer().writeShort(cy)
             self.session.sendMessage(m)
-            Char.myCharz().cx = cx
-            Char.myCharz().cy = cy
+            self.myChar.cx = cx
+            self.myChar.cy = cy
         except Exception as ex:
-            print(f"[Service] charMove error: {ex}")
+            from .logger import logger
+            logger.error(f"charMove error: {ex}", account_tag=self.account_tag)
 
     def chat(self, text: str) -> None:
         """Gửi tin nhắn công cộng trong map."""
@@ -315,7 +341,7 @@ class Service:
             return
 
         try:
-            char = Char.myCharz()
+            char = self.myChar
             cdir = getattr(char, "cdir", 1)
 
             if len(vMob) > 0 and len(vChar) > 0:

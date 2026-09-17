@@ -56,7 +56,15 @@ from .controller import Controller
 from .client import ClientNRO
 
 
-# 5. Hệ thống tìm đường Xmap
+# 5. Hệ thống Quản trị Đa Tài khoản & Proxy
+from .proxy_manager import ProxyConfig, ProxyPool, create_proxy_socket, parse_proxy
+from .account_manager import AccountConfig, AccountInstance, AccountManager
+from .logger import ConsoleLogger, logger, LogLevel
+from .display import print_banner, print_accounts_table, print_cli_help
+from .command_handler import execute_client_command, execute_multi_command
+from .terminal import interactive_cli
+
+# 6. Hệ thống tìm đường Xmap
 from .xmap import (
     XmapController,
     XmapData,

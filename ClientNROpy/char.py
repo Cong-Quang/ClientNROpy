@@ -24,6 +24,7 @@ class Char:
         self.charID: int = 0
         self.cName: str = ""
         self.ctaskId: int = 0
+        self.task_name: str = ""
         self.cgender: int = 0
         self.head: int = 0
         self.body: int = 0

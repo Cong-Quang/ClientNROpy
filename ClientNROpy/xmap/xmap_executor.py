@@ -71,7 +71,9 @@ class XmapExecutor:
 
         try:
             names = [w.name for w in map_info.waypoints]
-            print(f"[Xmap] Không tìm thấy cổng tới '{target_name}' (ID {target_map_id}). Cổng hiện có: {names}")
+            from ..logger import logger
+            tag = getattr(client, "account_id", "Client")
+            logger.auto(f"[Xmap] Không tìm thấy cổng tới '{target_name}' (ID {target_map_id}). Cổng hiện có: {names}", account_tag=tag)
         except Exception:
             pass
         return None
@@ -90,7 +92,9 @@ class XmapExecutor:
             ch.cy = y
             client.service.charMove(ch.cx, ch.cy)
         except Exception as ex:
-            print(f"[Xmap] TeleportMyChar exception: {ex}")
+            from ..logger import logger
+            tag = getattr(client, "account_id", "Client")
+            logger.debug(f"[Xmap] TeleportMyChar exception: {ex}", account_tag=tag)
 
     @staticmethod
     def execute_next_map(client: "ClientNRO", map_next: MapNext) -> bool:
@@ -116,7 +120,9 @@ class XmapExecutor:
             if wp.maxX < 60: cx = 15
             elif wp.minX > 1500: cx = wp.minX + 15
 
-            print(f"[Xmap] [AutoWaypoint] Dịch chuyển tới cổng ({cx}, {cy})...")
+            from ..logger import logger
+            tag = getattr(client, "account_id", "Client")
+            logger.auto(f"[Xmap] [AutoWaypoint] Dịch chuyển tới cổng ({cx}, {cy})...", account_tag=tag)
             XmapExecutor.TeleportMyChar(client, cx, cy)
             
             if wp.isOffline:
@@ -143,7 +149,9 @@ class XmapExecutor:
                             cx = wp.minX + (wp.maxX - wp.minX) // 2
                             if wp.maxX < 60: cx = 15
                             elif wp.minX > 1500: cx = wp.minX + 15
-                            print(f"[Xmap] [NPC 38] Chưa thấy ở Map {curr_mid}. Tuần tra tìm sang Map {wp_target}...")
+                            from ..logger import logger
+                            tag = getattr(client, "account_id", "Client")
+                            logger.auto(f"[Xmap] [NPC 38] Chưa thấy ở Map {curr_mid}. Tuần tra tìm sang Map {wp_target}...", account_tag=tag)
                             XmapExecutor.TeleportMyChar(client, cx, wp.maxY)
                             if wp.isOffline: client.service.getMapOffline()
                             else: client.service.requestChangeMap()
@@ -239,13 +247,15 @@ class XmapExecutor:
                 if npc_id == 38:
                     if transport_event.wait(timeout=3.0):
                         is_speedup = getattr(client.xmap_controller, "is_auto_speedup", True)
+                        from ..logger import logger
+                        tag = getattr(client, "account_id", "Client")
                         if is_speedup:
-                            print("[Xmap] [NPC 38] Đang bay tàu thời gian -> Kích hoạt tăng tốc (cmd -105, 1 ngọc)...")
+                            logger.auto("[Xmap] [NPC 38] Đang bay tàu thời gian -> Kích hoạt tăng tốc (cmd -105, 1 ngọc)...", account_tag=tag)
                             time.sleep(0.1)
                             client.service.transportNow()
                         else:
                             max_t = transport_info.get("max_time", 60)
-                            print(f"[Xmap] [NPC 38] Chờ tàu bay tự động (không tăng tốc, tối đa {max_t}s)...")
+                            logger.auto(f"[Xmap] [NPC 38] Chờ tàu bay tự động (không tăng tốc, tối đa {max_t}s)...", account_tag=tag)
                 return True
             finally:
                 if on_npc_menu in client.controller.on_npc_menu_callbacks:
@@ -334,7 +344,9 @@ class XmapExecutor:
                         break
             
             if not cap_item:
-                print(f"[Xmap] [Capsule] Không tìm thấy Capsule trong hành trang!")
+                from ..logger import logger
+                tag = getattr(client, "account_id", "Client")
+                logger.auto("[Xmap] [Capsule] Không tìm thấy Capsule trong hành trang!", account_tag=tag)
                 return False
 
             import threading
@@ -356,7 +368,9 @@ class XmapExecutor:
                 client.service.useItem(0, 1, cap_item.index_ui, -1)
 
                 if not capsule_event.wait(timeout=3.0):
-                    print(f"[Xmap] [Capsule] Quá thời gian chờ phản hồi danh sách map (cmd -91) từ server!")
+                    from ..logger import logger
+                    tag = getattr(client, "account_id", "Client")
+                    logger.auto("[Xmap] [Capsule] Quá thời gian chờ phản hồi danh sách map (cmd -91) từ server!", account_tag=tag)
                     return False
 
                 target_id = map_next.to
@@ -409,12 +423,15 @@ class XmapExecutor:
                             break
 
                 if matched_idx == -1:
-                    print(f"[Xmap] [Capsule] Không tìm thấy '{target_name}' (ID {target_id}) trong danh sách options của server!")
-                    print(f"       Danh sách hiện có ({len(received_maps)}): {received_maps}")
+                    from ..logger import logger
+                    tag = getattr(client, "account_id", "Client")
+                    logger.auto(f"[Xmap] [Capsule] Không tìm thấy '{target_name}' (ID {target_id}) trong danh sách options của server! ({received_maps})", account_tag=tag)
                     return False
 
                 selected_name = received_maps[matched_idx]
-                print(f"[Xmap] [Capsule] Chọn ô [{matched_idx:02d}] '{selected_name}' -> '{target_name}' (ID {target_id})...")
+                from ..logger import logger
+                tag = getattr(client, "account_id", "Client")
+                logger.auto(f"[Xmap] [Capsule] Chọn ô [{matched_idx:02d}] '{selected_name}' -> '{target_name}' (ID {target_id})...", account_tag=tag)
                 client.controller.map_capsule_return = client.myChar.mapInfo.mapID
                 client.service.requestMapSelect(matched_idx)
                 return True

@@ -6,7 +6,7 @@ Mô phỏng chính xác Controller.cs trong C#.
 vì chạy môi trường giả lập Headless không cần đồ hoạ.
 """
 
-from typing import Optional, List, Dict, Callable
+from typing import Optional, List, Dict, Callable, Any
 from .imessage_handler import IMessageHandler
 from .message import Message
 from .player_data import PlayerData
@@ -32,7 +32,8 @@ class Controller(IMessageHandler):
 
     me: Optional["Controller"] = None
 
-    def __init__(self):
+    def __init__(self, client: Optional[Any] = None):
+        self.client: Optional[Any] = client
         self.isConnectOK: bool = False
         self.isConnectionFail: bool = False
         self.isDisconnected: bool = False
@@ -66,6 +67,28 @@ class Controller(IMessageHandler):
         self.on_mob_killed_callbacks: List[Callable[[int], None]] = []
         # Callback tàu vũ trụ / tàu thời gian (cmd -105: max_time, trans_type)
         self.on_transport_callbacks: List[Callable[[int, int], None]] = []
+        # Callback mất kết nối và kết nối thất bại
+        self.on_disconnected_callbacks: List[Callable[[], None]] = []
+        self.on_connection_fail_callbacks: List[Callable[[], None]] = []
+
+    @property
+    def myChar(self) -> Char:
+        if self.client and hasattr(self.client, "myChar") and self.client.myChar is not None:
+            return self.client.myChar
+        return Char.myCharz()
+
+    @property
+    def service(self):
+        if self.client and hasattr(self.client, "service") and self.client.service is not None:
+            return self.client.service
+        from .service import Service
+        return Service.gI()
+
+    @property
+    def account_tag(self) -> str:
+        if self.client and hasattr(self.client, "account_id") and self.client.account_id:
+            return self.client.account_id
+        return "Client"
 
     @classmethod
     def gI(cls) -> "Controller":
@@ -79,18 +102,31 @@ class Controller(IMessageHandler):
         self.isDisconnected = False
         self.isConnectionFail = False
         self.isMain = isMain
-        print("[Controller] Connected to server successfully! Sending setClientType...")
-        Service.gI().setClientType()
+        from .logger import logger
+        logger.system("Kết nối tới máy chủ thành công! Đang thiết lập kết nối...", account_tag=self.account_tag)
+        self.service.setClientType()
 
     def onConnectionFail(self, isMain: bool) -> None:
         self.isConnectionFail = True
         self.isConnectOK = False
-        print("[Controller] Connection failed!")
+        from .logger import logger
+        logger.error("Kết nối tới máy chủ thất bại!", account_tag=self.account_tag)
+        for cb in list(self.on_connection_fail_callbacks):
+            try:
+                cb()
+            except Exception as ex:
+                logger.debug(f"[Controller] onConnectionFail error: {ex}", account_tag=self.account_tag)
 
     def onDisconnected(self, isMain: bool) -> None:
         self.isDisconnected = True
         self.isConnectOK = False
-        print("[Controller] Disconnected from server!")
+        from .logger import logger
+        logger.warn("Đã ngắt kết nối với máy chủ!", account_tag=self.account_tag)
+        for cb in list(self.on_disconnected_callbacks):
+            try:
+                cb()
+            except Exception as ex:
+                logger.debug(f"[Controller] onDisconnected error: {ex}", account_tag=self.account_tag)
 
     def read_item(self, reader) -> Optional[Item]:
         """Bóc tách cấu trúc 1 Item và các ItemOption đính kèm tương tự C#."""
@@ -120,20 +156,23 @@ class Controller(IMessageHandler):
             for _ in range(size):
                 options.append(msg.reader().readUTF())
             
-            print(f"[Controller] Nhận menu từ NPC {t_id}: {options}")
+            from .logger import logger
+            logger.debug(f"[Controller] Nhận menu từ NPC {t_id}: {options}", account_tag=self.account_tag)
             
             for cb in self.on_npc_menu_callbacks:
                 try:
                     cb(t_id, text, options)
                 except Exception as ex:
-                    print(f"[Controller] on_npc_menu callback error: {ex}")
+                    logger.debug(f"[Controller] on_npc_menu callback error: {ex}", account_tag=self.account_tag)
         except Exception as ex:
-            print(f"[Controller] _handle_npc_menu error: {ex}")
+            from .logger import logger
+            logger.debug(f"[Controller] _handle_npc_menu error: {ex}", account_tag=self.account_tag)
 
     def onMessage(self, msg: Message) -> None:
         cmd = msg.command
         if self.debug:
-            print(f"[RECV CMD] cmd={cmd}")
+            from .logger import logger
+            logger.debug(f"[RECV CMD] cmd={cmd}", account_tag=self.account_tag)
         try:
             # ------------------------------------------------------------------
             # BỎ QUA GÓI TIN TÀI NGUYÊN (Hình ảnh, map tiles, icon, effect data)
@@ -143,7 +182,7 @@ class Controller(IMessageHandler):
                 try:
                     b_act = msg.reader().readByte()
                     if b_act == 0:
-                        Service.gI().getResource(3, None)
+                        self.service.getResource(3, None)
                 except Exception:
                     pass
                 return
@@ -155,10 +194,10 @@ class Controller(IMessageHandler):
             # 1. PING / HEARTBEAT
             # ------------------------------------------------------------------
             if cmd == -120:
-                Service.gI().sendCheckController()
+                self.service.sendCheckController()
                 return
             if cmd == -121:
-                Service.gI().sendCheckMap()
+                self.service.sendCheckMap()
                 return
 
             # ------------------------------------------------------------------
@@ -187,19 +226,20 @@ class Controller(IMessageHandler):
             if cmd == 122:
                 time_wait = msg.reader().readShort()
                 self.server_wait_time = time_wait
-                print(f"[Controller] Server queue/cooldown: wait {time_wait}s. Auto-relogin in {time_wait}s...")
+                from .logger import logger
+                logger.system(f"Hàng đợi server: chờ {time_wait}s. Tự động đăng nhập lại sau {time_wait}s...", account_tag=self.account_tag)
                 for cb in self.on_cooldown_callbacks:
                     try:
                         cb(time_wait)
                     except Exception as ex:
-                        print(f"[Controller] on_cooldown_callback error: {ex}")
+                        logger.debug(f"[Controller] on_cooldown_callback error: {ex}", account_tag=self.account_tag)
                 if hasattr(self, "last_login_creds") and self.last_login_creds:
                     u, p, v = self.last_login_creds
                     def delayed_relogin():
                         import time
                         time.sleep(time_wait + 0.5)
-                        print(f"[Controller] Relogging in now for '{u}'...")
-                        Service.gI().login(u, p, version=v)
+                        logger.system(f"Đang tự động đăng nhập lại cho '{u}'...", account_tag=self.account_tag)
+                        self.service.login(u, p, version=v)
                     import threading
                     threading.Thread(target=delayed_relogin, daemon=True).start()
                 return
@@ -208,7 +248,8 @@ class Controller(IMessageHandler):
             # 3c. TÀI KHOẢN CHƯA CÓ NHÂN VẬT (cmd 2: CreateCharScr)
             # ------------------------------------------------------------------
             if cmd == 2:
-                print("[Controller] Login OK! Tài khoản mới chưa có nhân vật (Cần tạo nhân vật).")
+                from .logger import logger
+                logger.alert("Đăng nhập thành công nhưng tài khoản chưa tạo nhân vật!", account_tag=self.account_tag)
                 for cb in self.on_server_message_callbacks:
                     cb("Tài khoản chưa có nhân vật. Cần tạo nhân vật mới.")
                 return
@@ -218,10 +259,6 @@ class Controller(IMessageHandler):
             # ------------------------------------------------------------------
             if cmd in (-26, -25, 94):
                 text = msg.reader().readUTF()
-                try:
-                    print(f"[Server Message] {text}")
-                except Exception:
-                    print(f"[Server Message] {text.encode('ascii', errors='replace').decode('ascii')}")
                 for cb in self.on_server_message_callbacks:
                     try:
                         cb(text)
@@ -236,20 +273,11 @@ class Controller(IMessageHandler):
                 raw_chat = msg.reader().readUTF()
                 chat_vip = ChatVip.parse(raw_chat)
                 self.chat_vip_list.append(chat_vip)
-                if chat_vip.is_boss:
-                    if chat_vip.is_killed:
-                        print(f"[THÔNG BÁO BOSS BỊ HẠ] '{chat_vip.boss_name}' đã bị tiêu diệt bởi {chat_vip.killer}!")
-                    else:
-                        zone_str = f" khu vực {chat_vip.zone_id}" if chat_vip.zone_id >= 0 else ""
-                        print(f"[THÔNG BÁO BOSS XUẤT HIỆN] BOSS '{chat_vip.boss_name}' vừa xuất hiện tại {chat_vip.map_name}{zone_str}!")
-                else:
-                    print(f"[CHAT VIP / THẾ GIỚI] {chat_vip.text}")
-
                 for cb in self.on_chat_vip_callbacks:
                     try:
                         cb(chat_vip)
                     except Exception as ex:
-                        print(f"[Controller] on_chat_vip callback error: {ex}")
+                        pass
                 return
 
             # ------------------------------------------------------------------
@@ -263,9 +291,11 @@ class Controller(IMessageHandler):
                         try:
                             cb(max_time, trans_type)
                         except Exception as ex:
-                            print(f"[Controller] on_transport_callback error: {ex}")
+                            from .logger import logger
+                            logger.debug(f"[Controller] on_transport_callback error: {ex}", account_tag=self.account_tag)
                 except Exception as ex:
-                    print(f"[Controller] cmd -105 parse error: {ex}")
+                    from .logger import logger
+                    logger.debug(f"[Controller] cmd -105 parse error: {ex}", account_tag=self.account_tag)
                 return
 
             # ------------------------------------------------------------------
@@ -273,12 +303,13 @@ class Controller(IMessageHandler):
             # ------------------------------------------------------------------
             if cmd == 92:
                 text = msg.reader().readUTF()
-                print(f"[CHAT THẾ GIỚI] {text}")
+                from .logger import logger
+                logger.chat(f"[THẾ GIỚI] {text}", account_tag=self.account_tag)
                 for cb in self.on_chat_world_callbacks:
                     try:
                         cb(text)
-                    except Exception as ex:
-                        print(f"[Controller] on_chat_world callback error: {ex}")
+                    except Exception:
+                        pass
                 return
 
             # ------------------------------------------------------------------
@@ -288,7 +319,8 @@ class Controller(IMessageHandler):
                 avatar_id = msg.reader().readShort()
                 chat_t1 = msg.reader().readUTF()
                 chat_t2 = msg.reader().readUTF()
-                print(f"[BIG MESSAGE (Avatar {avatar_id})] {chat_t1} - {chat_t2}")
+                from .logger import logger
+                logger.debug(f"[BIG MESSAGE (Avatar {avatar_id})] {chat_t1} - {chat_t2}", account_tag=self.account_tag)
                 for cb in self.on_server_message_callbacks:
                     try:
                         cb(f"{chat_t1} - {chat_t2}")
@@ -307,7 +339,8 @@ class Controller(IMessageHandler):
                     self.capsule_map_names.append(msg.reader().readUTF())
                     self.capsule_planet_names.append(msg.reader().readUTF())
                 if self.debug:
-                    print(f"[Controller] Capsule map list ({count} maps): {self.capsule_map_names}")
+                    from .logger import logger
+                    logger.debug(f"[Controller] Capsule map list ({count} maps): {self.capsule_map_names}", account_tag=self.account_tag)
                 for cb in self.on_capsule_maps_callbacks:
                     try:
                         cb(self.capsule_map_names, self.capsule_planet_names)
@@ -321,10 +354,8 @@ class Controller(IMessageHandler):
             if cmd == 44:
                 char_id = msg.reader().readInt()
                 text = msg.reader().readUTF()
-                try:
-                    print(f"[Chat Map] ID {char_id}: {text}")
-                except Exception:
-                    print(f"[Chat Map] ID {char_id}: {text.encode('ascii', errors='replace').decode('ascii')}")
+                from .logger import logger
+                logger.chat(f"[{char_id}]: {text}", account_tag=self.account_tag)
                 for cb in self.on_chat_callbacks:
                     cb(char_id, text)
                 return
@@ -335,7 +366,7 @@ class Controller(IMessageHandler):
             if cmd == -37:
                 b63 = msg.reader().readByte()
                 if b63 == 0:
-                    char = Char.myCharz()
+                    char = self.myChar
                     char.head = msg.reader().readShort()
                     n_body = msg.reader().readUnsignedByte()
                     char.arrItemBody.clear()
@@ -350,7 +381,7 @@ class Controller(IMessageHandler):
             # ------------------------------------------------------------------
             if cmd == -36:
                 b38 = msg.reader().readByte()
-                char = Char.myCharz()
+                char = self.myChar
                 if b38 == 0:
                     n_bag = msg.reader().readUnsignedByte()
                     char.arrItemBag.clear()
@@ -367,7 +398,8 @@ class Controller(IMessageHandler):
                             except Exception:
                                 rest = -1
                             if rest != 0:
-                                print(f"[Controller] -36 bọc balo lỗi ở slot {idx}/{n_bag}: {ex} (còn {rest} bytes). Giữ {len(char.arrItemBag)} món đã đọc.")
+                                from .logger import logger
+                                logger.debug(f"[Controller] -36 bọc balo lỗi ở slot {idx}/{n_bag}: {ex} (còn {rest} bytes). Giữ {len(char.arrItemBag)} món đã đọc.", account_tag=self.account_tag)
                             break
                         if it is not None:
                             it.index_ui = idx
@@ -391,64 +423,53 @@ class Controller(IMessageHandler):
                         rest = msg.reader().available()
                     except Exception:
                         rest = -1
-                    print(f"[Controller] -36 sub={b38} chưa hỗ trợ (còn {rest} bytes). Bỏ qua.")
+                    from .logger import logger
+                    logger.debug(f"[Controller] -36 sub={b38} chưa hỗ trợ (còn {rest} bytes). Bỏ qua.", account_tag=self.account_tag)
                 return
 
             # ------------------------------------------------------------------
             # 8. CẬP NHẬT RƯƠNG ĐỒ (cmd -35)
             # ------------------------------------------------------------------
             if cmd == -35:
-                b32 = msg.reader().readByte()
-                char = Char.myCharz()
-                if b32 == 0:
+                b35 = msg.reader().readByte()
+                char = self.myChar
+                if b35 == 0:
                     n_box = msg.reader().readUnsignedByte()
                     char.arrItemBox.clear()
                     for idx in range(n_box):
-                        it = self.read_item(msg.reader())
+                        try:
+                            if msg.reader().available() <= 0:
+                                break
+                            it = self.read_item(msg.reader())
+                        except Exception:
+                            break
                         if it is not None:
                             it.index_ui = idx
                             char.arrItemBox.append(it)
-                elif b32 == 2:
-                    idx = msg.reader().readByte()
-                    qty = msg.reader().readInt()
-                    for it in char.arrItemBox:
-                        if it.index_ui == idx:
-                            it.quantity = qty
-                            if qty <= 0:
-                                char.arrItemBox.remove(it)
-                            break
+                    for cb in self.on_box_update_callbacks:
+                        cb(char.arrItemBox)
                 return
 
             # ------------------------------------------------------------------
-            # 9. THÔNG TIN PET / ĐỆ TỬ (cmd -107)
+            # 9. THÔNG TIN ĐỆ TỬ / PET (cmd -107)
             # ------------------------------------------------------------------
             if cmd == -107:
-                b15 = msg.reader().readByte()
-                char = Char.myCharz()
-                if b15 == 0:
-                    char.pet.havePet = False
-                elif b15 == 1:
-                    char.pet.havePet = True
-                elif b15 == 2:
-                    char.pet.havePet = True
-                    pet = char.pet
+                b107 = msg.reader().readByte()
+                if b107 == 0:
+                    pet = self.myChar.pet
+                    pet.isHavePet = True
+                    pet.cgender = msg.reader().readByte()
                     pet.head = msg.reader().readShort()
-                    num26 = msg.reader().readUnsignedByte()
-                    pet.arrItemBody.clear()
-                    for _ in range(num26):
-                        it = self.read_item(msg.reader())
-                        if it is not None:
-                            pet.arrItemBody.append(it)
-                    pet.cHP = msg.readInt3Byte()
-                    pet.cHPFull = msg.readInt3Byte()
-                    pet.cMP = msg.readInt3Byte()
-                    pet.cMPFull = msg.readInt3Byte()
-                    pet.cDamFull = msg.readInt3Byte()
+                    pet.body = msg.reader().readShort()
+                    pet.leg = msg.reader().readShort()
                     pet.cName = msg.reader().readUTF()
-                    pet.currStrLevel = msg.reader().readUTF()
+                    pet.cHP = msg.reader().readInt()
+                    pet.cHPFull = msg.reader().readInt()
+                    pet.cMP = msg.reader().readInt()
+                    pet.cMPFull = msg.reader().readInt()
+                    pet.cDamFull = msg.reader().readInt()
                     pet.cPower = msg.reader().readLong()
                     pet.cTiemNang = msg.reader().readLong()
-                    pet.petStatus = msg.reader().readByte()
                     pet.cStamina = msg.reader().readShort()
                     pet.cMaxStamina = msg.reader().readShort()
                     pet.cCriticalFull = msg.reader().readByte()
@@ -459,7 +480,8 @@ class Controller(IMessageHandler):
                         sk_id = msg.reader().readShort()
                         if sk_id != -1:
                             pet.arrPetSkill.append(sk_id)
-                    print(f"[Controller] Pet/Disciple loaded: {pet}")
+                    from .logger import logger
+                    logger.debug(f"[Controller] Pet/Disciple loaded: {pet}", account_tag=self.account_tag)
                     for cb in self.on_pet_info_callbacks:
                         cb(pet)
                 return
@@ -469,7 +491,7 @@ class Controller(IMessageHandler):
             # ------------------------------------------------------------------
             if cmd == -34:
                 b10 = msg.reader().readByte()
-                char = Char.myCharz()
+                char = self.myChar
                 if b10 == 0:
                     tree = char.magicTree
                     tree.id = msg.reader().readShort()
@@ -486,7 +508,8 @@ class Controller(IMessageHandler):
                         msg.reader().readByte()
                         msg.reader().readByte()
                     tree.isUpdate = msg.reader().readBool()
-                    print(f"[Controller] MagicTree loaded: {tree}")
+                    from .logger import logger
+                    logger.debug(f"[Controller] MagicTree loaded: {tree}", account_tag=self.account_tag)
                     for cb in self.on_magic_tree_callbacks:
                         cb(tree)
                 return
@@ -496,7 +519,7 @@ class Controller(IMessageHandler):
             # ------------------------------------------------------------------
             if cmd == 29:
                 n_zones = msg.reader().readByte()
-                char = Char.myCharz()
+                char = self.myChar
                 char.mapInfo.zones.clear()
                 for _ in range(n_zones):
                     z_id = msg.reader().readByte()
@@ -510,7 +533,8 @@ class Controller(IMessageHandler):
                         msg.reader().readInt()
                     zone = ZoneInfo(zoneId=z_id, numPlayer=num_p, maxPlayer=max_p, pts=pts)
                     char.mapInfo.zones.append(zone)
-                print(f"[Controller] Zones list loaded: {len(char.mapInfo.zones)} zones")
+                from .logger import logger
+                logger.debug(f"[Controller] Zones list loaded: {len(char.mapInfo.zones)} zones", account_tag=self.account_tag)
                 for cb in self.on_zone_info_callbacks:
                     cb(char.mapInfo.zones)
                 return
@@ -519,7 +543,7 @@ class Controller(IMessageHandler):
             # 12. THÔNG TIN MAP & CÁC THỰC THỂ (cmd -24: loadInfoMap)
             # ------------------------------------------------------------------
             if cmd == -24:
-                char = Char.myCharz()
+                char = self.myChar
                 char.mapInfo.mapID = msg.reader().readUnsignedByte()
                 char.mapInfo.planetID = msg.reader().readByte()
                 msg.reader().readByte()  # tileID
@@ -614,8 +638,9 @@ class Controller(IMessageHandler):
                 except Exception:
                     pass
 
-                print(f"[Controller] Map loaded: {char.mapInfo}")
-                Service.gI().finishLoadMap()
+                from .logger import logger
+                logger.debug(f"Map loaded: {char.mapInfo}", account_tag=self.account_tag)
+                self.service.finishLoadMap()
                 for cb in self.on_map_info_callbacks:
                     cb(char.mapInfo)
                 return
@@ -662,10 +687,11 @@ class Controller(IMessageHandler):
                     msg.reader().readShort()  # idHat
                 except Exception:
                     pass
-                char = Char.myCharz()
+                char = self.myChar
                 char.mapInfo.chars[charID] = c
                 if self.debug:
-                    print(f"[Controller] Player entered map: '{c.cName}' (ID={charID}) at ({c.cx},{c.cy})")
+                    from .logger import logger
+                    logger.debug(f"[Controller] Player entered map: '{c.cName}' (ID={charID}) at ({c.cx},{c.cy})", account_tag=self.account_tag)
                 for cb in self.on_char_in_map_callbacks:
                     try:
                         cb(c)
@@ -678,11 +704,12 @@ class Controller(IMessageHandler):
             # ------------------------------------------------------------------
             if cmd == -6:
                 charID = msg.reader().readInt()
-                char = Char.myCharz()
+                char = self.myChar
                 if charID in char.mapInfo.chars:
                     removed = char.mapInfo.chars.pop(charID)
                     if self.debug:
-                        print(f"[Controller] Player left map: '{removed.cName}' (ID={charID})")
+                        from .logger import logger
+                        logger.debug(f"[Controller] Player left map: '{removed.cName}' (ID={charID})", account_tag=self.account_tag)
                     for cb in self.on_char_in_map_callbacks:
                         try:
                             cb(removed)
@@ -697,7 +724,7 @@ class Controller(IMessageHandler):
                 charID = msg.reader().readInt()
                 cx = msg.reader().readShort()
                 cy = msg.reader().readShort()
-                char = Char.myCharz()
+                char = self.myChar
                 if charID in char.mapInfo.chars:
                     char.mapInfo.chars[charID].cx = cx
                     char.mapInfo.chars[charID].cy = cy
@@ -714,7 +741,7 @@ class Controller(IMessageHandler):
                 pId = msg.reader().readInt()
                 if pId == -2:
                     msg.reader().readShort()
-                char = Char.myCharz()
+                char = self.myChar
                 char.mapInfo.items[itemMapID] = ItemMap(itemMapID, itemTemplateID, x, y, pId)
                 return
 
@@ -723,13 +750,13 @@ class Controller(IMessageHandler):
             # ------------------------------------------------------------------
             if cmd in (-21, -20):
                 itemMapID = msg.reader().readShort()
-                char = Char.myCharz()
+                char = self.myChar
                 char.mapInfo.items.pop(itemMapID, None)
                 return
             if cmd == -19:
                 itemMapID = msg.reader().readShort()
                 msg.reader().readInt()  # nhặt bởi player ID
-                char = Char.myCharz()
+                char = self.myChar
                 char.mapInfo.items.pop(itemMapID, None)
                 return
 
@@ -738,14 +765,14 @@ class Controller(IMessageHandler):
             # ------------------------------------------------------------------
             if cmd == -9:
                 mob_idx = msg.reader().readUnsignedByte()
-                char = Char.myCharz()
+                char = self.myChar
                 if mob_idx in char.mapInfo.mobs:
                     char.mapInfo.mobs[mob_idx].hp = msg.readInt3Byte()
                 return
 
             if cmd == -12:
                 mob_idx = msg.reader().readUnsignedByte()
-                char = Char.myCharz()
+                char = self.myChar
                 if mob_idx in char.mapInfo.mobs:
                     mob = char.mapInfo.mobs[mob_idx]
                     template_id = getattr(mob, "templateId", -1)
@@ -756,12 +783,13 @@ class Controller(IMessageHandler):
                             cb(template_id)
                         except Exception as ex:
                             if self.debug:
-                                print(f"[Controller] on_mob_killed callback error: {ex}")
+                                from .logger import logger
+                                logger.debug(f"[Controller] on_mob_killed callback error: {ex}", account_tag=self.account_tag)
                 return
 
             if cmd == -13:
                 mob_idx = msg.reader().readUnsignedByte()
-                char = Char.myCharz()
+                char = self.myChar
                 if mob_idx in char.mapInfo.mobs:
                     m = char.mapInfo.mobs[mob_idx]
                     msg.reader().readByte()  # sys
@@ -787,23 +815,26 @@ class Controller(IMessageHandler):
                     except Exception:
                         avatar = -1
                     if self.debug:
-                        print(f"[Controller] NPC menu {npc_template_id}: {chat_text[:120]}... opts={options}")
+                        from .logger import logger
+                        logger.debug(f"[Controller] NPC menu {npc_template_id}: {chat_text[:120]}... opts={options}", account_tag=self.account_tag)
                     for cb in self.on_npc_menu_callbacks:
                         try:
                             cb(npc_template_id, chat_text, options)
                         except Exception as ex:
                             if self.debug:
-                                print(f"[Controller] on_npc_menu callback error: {ex}")
+                                from .logger import logger
+                                logger.debug(f"[Controller] on_npc_menu callback error: {ex}", account_tag=self.account_tag)
                 except Exception as ex:
                     if self.debug:
-                        print(f"[Controller] parse NPC menu error: {ex}")
+                        from .logger import logger
+                        logger.debug(f"[Controller] parse NPC menu error: {ex}", account_tag=self.account_tag)
                 return
 
             # ------------------------------------------------------------------
             # 19. CẬP NHẬT TIỀN TỆ (cmd 6)
             # ------------------------------------------------------------------
             if cmd == 6:
-                char = Char.myCharz()
+                char = self.myChar
                 char.xu = msg.reader().readLong()
                 char.luong = msg.reader().readInt()
                 char.luongKhoa = msg.reader().readInt()
@@ -813,7 +844,7 @@ class Controller(IMessageHandler):
             # 19b. THÔNG TIN CHỈ SỐ BẢN THÂN (cmd -42: MY_INFO / ME_LOAD_INFO)
             # ------------------------------------------------------------------
             if cmd == -42:
-                char = Char.myCharz()
+                char = self.myChar
                 char.cHPGoc = msg.readInt3Byte()
                 char.cMPGoc = msg.readInt3Byte()
                 char.cDamGoc = msg.reader().readInt()
@@ -841,7 +872,8 @@ class Controller(IMessageHandler):
                     if (last is None or abs(hp_pct - last[0]) >= 0.05 or abs(mp_pct - last[1]) >= 0.05
                             or now - last[2] >= 30.0):
                         self._last_myinfo_log = (hp_pct, mp_pct, now)
-                        print(f"[Controller] My Info loaded: HP={char.cHP:,}/{char.cHPFull:,}, MP={char.cMP:,}/{char.cMPFull:,}, Dam={char.cDamFull:,}")
+                        from .logger import logger
+                        logger.debug(f"My Info loaded: HP={char.cHP:,}/{char.cHPFull:,}, MP={char.cMP:,}/{char.cMPFull:,}, Dam={char.cDamFull:,}", account_tag=self.account_tag)
                 except Exception:
                     pass
                 return
@@ -851,7 +883,7 @@ class Controller(IMessageHandler):
             # ------------------------------------------------------------------
             if cmd == 84:
                 charID = msg.reader().readInt()
-                char = Char.myCharz()
+                char = self.myChar
                 if charID == char.charID:
                     char.cHP = char.cHPFull
                     char.cMP = char.cMPFull
@@ -867,16 +899,33 @@ class Controller(IMessageHandler):
                     c.statusMe = 1
                 return
 
+            # ------------------------------------------------------------------
+            # 20. HỒI SINH SỐNG LẠI (cmd -16)
+            # ------------------------------------------------------------------
+            if cmd == -16:
+                c_id = msg.reader().readInt()
+                if c_id == self.myChar.charID:
+                    c = self.myChar
+                    c.isDie = False
+                    c.cHP = c.cHPFull
+                    c.cMP = c.cMPFull
+                    c.cx = msg.reader().readShort()
+                    c.cy = msg.reader().readShort()
+                    c.statusMe = 1
+                return
+
         except Exception as ex:
             if self.debug:
-                print(f"[Controller] Error parsing message {cmd}: {ex}")
+                from .logger import logger
+                logger.debug(f"[Controller] Error parsing message {cmd}: {ex}", account_tag=self.account_tag)
 
     def readLogin(self, msg: Message) -> None:
         """Đọc danh sách nhân vật sau khi đăng nhập thành công."""
         try:
             count = msg.reader().readByte()
             self.playerDataList.clear()
-            print(f"[Controller] Login SUCCESS! Number of characters: {count}")
+            from .logger import logger
+            logger.debug(f"Login SUCCESS! Number of characters: {count}", account_tag=self.account_tag)
             for _ in range(count):
                 player_id = msg.reader().readInt()
                 name = msg.reader().readUTF()
@@ -886,19 +935,21 @@ class Controller(IMessageHandler):
                 ppoint = msg.reader().readLong()
                 player = PlayerData(player_id, name, head, body, leg, ppoint)
                 self.playerDataList.append(player)
-                print(f"  -> {player}")
+                logger.debug(f"  -> {player}", account_tag=self.account_tag)
 
             for cb in self.on_login_ok_callbacks:
                 cb(self.playerDataList)
         except Exception as ex:
-            print(f"[Controller] readLogin error: {ex}")
+            from .logger import logger
+            logger.error(f"readLogin error: {ex}", account_tag=self.account_tag)
 
     def messageNotLogin(self, msg: Message) -> None:
         try:
             sub = msg.reader().readByte()
             if sub == 2:
                 link_default = msg.reader().readUTF()
-                print(f"[Controller] Server LinkDefault: {link_default}")
+                from .logger import logger
+                logger.debug(f"Server LinkDefault: {link_default}", account_tag=self.account_tag)
         except Exception:
             pass
 
@@ -906,25 +957,29 @@ class Controller(IMessageHandler):
         try:
             sub = msg.reader().readByte()
             if self.debug:
-                print(f"[Controller] messageNotMap sub={sub}")
+                from .logger import logger
+                logger.debug(f"[Controller] messageNotMap sub={sub}", account_tag=self.account_tag)
             if sub == 4:
                 # Báo cho server biết client đã sẵn sàng (bỏ qua tải resource map/data)
-                Service.gI().clientOk()
+                self.service.clientOk()
             elif sub == 35:
                 text = msg.reader().readUTF()
                 if self.debug:
-                    print(f"[Controller] NotMap 35: {text}")
+                    from .logger import logger
+                    logger.debug(f"[Controller] NotMap 35: {text}", account_tag=self.account_tag)
         except Exception as ex:
-            print(f"[Controller] messageNotMap error: {ex}")
+            from .logger import logger
+            logger.debug(f"[Controller] messageNotMap error: {ex}", account_tag=self.account_tag)
 
     def messageSubCommand(self, msg: Message) -> None:
         """Đọc thông tin nhân vật chi tiết, túi đồ, trang bị, rương (cmd -30)."""
         try:
             sub = msg.reader().readByte()
             if self.debug:
-                print(f"[RECV CMD -30] sub={sub}")
+                from .logger import logger
+                logger.debug(f"[RECV CMD -30] sub={sub}", account_tag=self.account_tag)
             if sub == 0:
-                char = Char.myCharz()
+                char = self.myChar
                 char.charID = msg.reader().readInt()
                 char.ctaskId = msg.reader().readByte()
                 char.cgender = msg.reader().readByte()
@@ -989,9 +1044,13 @@ class Controller(IMessageHandler):
                 except Exception:
                     pass
 
-                print(f"[Controller] In-game Char loaded: Name='{char.cName}', "
-                      f"Power={char.cPower:,}, Xu={char.xu:,}, Luong={char.luong:,} | "
-                      f"Body: {len(char.arrItemBody)} items, Bag: {len(char.arrItemBag)} items, Box: {len(char.arrItemBox)} items")
+                from .logger import logger
+                logger.debug(
+                    f"In-game Char loaded: Name='{char.cName}', "
+                    f"Power={char.cPower:,}, Xu={char.xu:,}, Luong={char.luong:,} | "
+                    f"Body: {len(char.arrItemBody)} items, Bag: {len(char.arrItemBag)} items, Box: {len(char.arrItemBox)} items",
+                    account_tag=self.account_tag,
+                )
 
                 for cb in self.on_char_info_callbacks:
                     cb(char)
@@ -999,12 +1058,12 @@ class Controller(IMessageHandler):
                     cb(char.arrItemBag)
 
             elif sub == 1:
-                char = Char.myCharz()
+                char = self.myChar
                 char.nClass = msg.reader().readByte()
                 char.cTiemNang = msg.reader().readLong()
 
             elif sub == 4:
-                char = Char.myCharz()
+                char = self.myChar
                 char.xu = msg.reader().readLong()
                 char.luong = msg.reader().readInt()
                 char.cHP = msg.readInt3Byte()
@@ -1012,18 +1071,18 @@ class Controller(IMessageHandler):
                 char.luongKhoa = msg.reader().readInt()
 
             elif sub == 5:
-                char = Char.myCharz()
+                char = self.myChar
                 char.cHP = msg.readInt3Byte()
 
             elif sub == 6:
                 # ME_LOAD_MP: cập nhật KI bản thân
-                char = Char.myCharz()
+                char = self.myChar
                 char.cMP = msg.readInt3Byte()
 
             elif sub == 13:
                 # Cập nhật HP người chơi (bản thân hoặc người khác)
                 cid = msg.reader().readInt()
-                char = Char.myCharz()
+                char = self.myChar
                 target = char if cid == char.charID else char.mapInfo.chars.get(cid)
                 if target is not None:
                     target.cHP = msg.readInt3Byte()
@@ -1040,7 +1099,7 @@ class Controller(IMessageHandler):
             elif sub == 14:
                 # HP người chơi khác + hiệu ứng trúng đòn
                 cid = msg.reader().readInt()
-                char = Char.myCharz()
+                char = self.myChar
                 target = char.mapInfo.chars.get(cid)
                 if target is not None:
                     target.cHP = msg.readInt3Byte()
@@ -1059,7 +1118,7 @@ class Controller(IMessageHandler):
             elif sub == 15:
                 # Người chơi khác hồi sinh
                 cid = msg.reader().readInt()
-                char = Char.myCharz()
+                char = self.myChar
                 target = char.mapInfo.chars.get(cid)
                 if target is not None:
                     target.cHP = msg.readInt3Byte()
@@ -1071,17 +1130,18 @@ class Controller(IMessageHandler):
 
             elif sub == 23:
                 # Học skill mới -> thêm vào danh sách skill
-                char = Char.myCharz()
+                char = self.myChar
                 sk_id = msg.reader().readShort()
                 if sk_id not in char.skills:
                     char.skills.append(sk_id)
-                    print(f"[Controller] Học skill mới: skillId={sk_id} (tổng {len(char.skills)} skill)")
+                    from .logger import logger
+                    logger.debug(f"[Controller] Học skill mới: skillId={sk_id} (tổng {len(char.skills)} skill)", account_tag=self.account_tag)
                 return
 
             elif sub == 35:
                 # Cập nhật trạng thái PK
                 cid = msg.reader().readInt()
-                char = Char.myCharz()
+                char = self.myChar
                 pk_type = msg.reader().readByte()
                 if cid == char.charID:
                     char.cTypePk = pk_type
@@ -1090,4 +1150,5 @@ class Controller(IMessageHandler):
                 return
         except Exception as ex:
             if self.debug:
-                print(f"[Controller] messageSubCommand error: {ex}")
+                from .logger import logger
+                logger.debug(f"[Controller] messageSubCommand error: {ex}", account_tag=self.account_tag)

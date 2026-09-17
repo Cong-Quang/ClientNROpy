@@ -25,12 +25,13 @@ class Session_ME(ISession):
 
     instance: Optional["Session_ME"] = None
 
-    def __init__(self):
+    def __init__(self, proxy: Optional[str] = None):
         self.sc: Optional[socket.socket] = None
         self.messageHandler: Optional[IMessageHandler] = None
         self.isMainSession: bool = True
         self.connected: bool = False
         self.connecting: bool = False
+        self.proxy: Optional[str] = proxy
 
         self.host: str = ""
         self.port: int = 0
@@ -80,10 +81,14 @@ class Session_ME(ISession):
     def NetworkInit(self) -> None:
         self.connecting = True
         try:
-            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            sock.settimeout(10.0)
-            sock.connect((self.host, self.port))
-            sock.settimeout(None)
+            if self.proxy:
+                from .proxy_manager import create_proxy_socket
+                sock = create_proxy_socket(self.proxy, self.host, self.port, timeout=12.0)
+            else:
+                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                sock.settimeout(10.0)
+                sock.connect((self.host, self.port))
+                sock.settimeout(None)
             self.sc = sock
             self.connected = True
             self.connecting = False
@@ -103,7 +108,8 @@ class Session_ME(ISession):
         except Exception as ex:
             self.connecting = False
             self.connected = False
-            print(f"[Session_ME] Connect error to {self.host}:{self.port} -> {ex}")
+            from .logger import logger
+            logger.error(f"Connect error to {self.host}:{self.port} (proxy={self.proxy}) -> {ex}")
             if self.messageHandler:
                 self.messageHandler.onConnectionFail(self.isMainSession)
 

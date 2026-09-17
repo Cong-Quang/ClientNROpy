@@ -1,0 +1,18 @@
+[
+  {
+    "username": "taikhoan1",
+    "password": "matkhau1",
+    "enabled": true,
+    "auto_reconnect": true,
+    "proxy": null,
+    "auto": ["hunt"]
+  },
+  {
+    "username": "taikhoan2",
+    "password": "matkhau2",
+    "enabled": true,
+    "auto_reconnect": true,
+    "proxy": null,
+    "auto": ["hunt"]
+  }
+]

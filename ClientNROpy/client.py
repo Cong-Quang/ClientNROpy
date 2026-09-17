@@ -35,20 +35,31 @@ class ClientNRO:
     cho các công cụ game / bot tự động hoá không cần đồ hoạ.
     """
 
-    def __init__(self, host: str = "51.79.163.109", port: int = 12457, version: str = "2.1.4"):
+    def __init__(
+        self,
+        host: str = "51.79.163.109",
+        port: int = 12457,
+        version: str = "2.1.4",
+        proxy: Optional[str] = None,
+        account_id: str = "",
+        username: str = "",
+    ):
+        self.account_id: str = account_id or username or "Client"
+        self.username: str = username
         self.host: str = host
         self.port: int = port
         self.version: str = version
-        self.session: Session_ME = Session_ME.gI()
-        self.controller: Controller = Controller.gI()
-        self.service: Service = Service.gI()
+        self.proxy: Optional[str] = proxy
+
+        # Khởi tạo đối tượng độc lập cho từng client (không chia sẻ Singleton!)
+        self.session: Session_ME = Session_ME(proxy=proxy)
+        self.myChar: Char = Char()
+        self.service: Service = Service(session=self.session, client=self)
         self.service.version = version
+        self.controller: Controller = Controller(client=self)
 
         # Đăng ký Controller làm IMessageHandler
         self.session.setHandler(self.controller)
-
-        # Tham chiếu trạng thái nhân vật
-        self.myChar: Char = Char.myCharz()
 
         # Bộ điều khiển tìm đường tự động Xmap
         self.xmap_controller: XmapController = XmapController(self)
@@ -126,6 +137,39 @@ class ClientNRO:
         """Yêu cầu đổi sang khu vực chỉ định (cmd 21)."""
         self.service.requestChangeZone(zone_id)
 
+    def change_to_least_populated_zone(self) -> Optional[int]:
+        """
+        Tìm và tự động chuyển sang khu vực có ít người chơi nhất trong map hiện tại.
+        Trả về zoneId được chọn hoặc None nếu thất bại.
+        """
+        try:
+            self.request_zones()
+            time.sleep(0.4)
+            zones = getattr(self.myChar.mapInfo, "zones", [])
+            if not zones:
+                time.sleep(0.3)
+                zones = getattr(self.myChar.mapInfo, "zones", [])
+
+            if not zones:
+                return None
+
+            current_zone = getattr(self.myChar.mapInfo, "zoneID", -1)
+            # Lọc các khu còn chỗ trống
+            valid_zones = [z for z in zones if getattr(z, "numPlayer", 0) < getattr(z, "maxPlayer", 15)]
+            if not valid_zones:
+                valid_zones = list(zones)
+
+            # Sắp xếp tăng dần theo số lượng người
+            valid_zones.sort(key=lambda z: getattr(z, "numPlayer", 0))
+            best = valid_zones[0]
+            best_id = getattr(best, "zoneId", 0)
+
+            if best_id != current_zone:
+                self.change_zone(best_id)
+            return best_id
+        except Exception:
+            return None
+
     def request_pet_info(self) -> None:
         """Yêu cầu máy chủ gửi thông tin đệ tử / pet (cmd -107)."""
         self.service.petInfo()
@@ -187,12 +231,12 @@ class ClientNRO:
         """
         Đăng xuất tài khoản an toàn (mô phỏng Logout trong GameScr / LoginScr):
         - Đóng phiên kết nối Session_ME
-        - Đặt lại dữ liệu nhân vật Char.clearMyChar()
+        - Đặt lại dữ liệu nhân vật
         """
-        print("[ClientNRO] Logging out...")
+        from .logger import logger
+        logger.system("Đang đăng xuất an toàn...", account_tag=self.account_id)
         self.disconnect()
-        Char.clearMyChar()
-        self.myChar = Char.myCharz()
+        self.myChar = Char()
 
     # --------------------------------------------------------------------------
     # Đăng ký các callback sự kiện
@@ -245,6 +289,14 @@ class ClientNRO:
         """Lắng nghe tin nhắn chat thế giới từ máy chủ (cmd 92)."""
         self.controller.on_chat_world_callbacks.append(callback)
 
+    def on_disconnected(self, callback: Callable[[], None]) -> None:
+        """Lắng nghe sự kiện ngắt kết nối với máy chủ."""
+        self.controller.on_disconnected_callbacks.append(callback)
+
+    def on_connection_fail(self, callback: Callable[[], None]) -> None:
+        """Lắng nghe sự kiện kết nối máy chủ thất bại."""
+        self.controller.on_connection_fail_callbacks.append(callback)
+
     def get_chat_vip_history(self) -> List[ChatVip]:
         """Lấy danh sách lịch sử tin ChatVip và thông báo Boss đã nhận."""
         return self.controller.chat_vip_list
@@ -279,6 +331,45 @@ class ClientNRO:
     def on_xmap_finish(self, callback: Callable[[bool, str], None]) -> None:
         """Lắng nghe sự kiện kết thúc Xmap (thành công hoặc thất bại)."""
         self.xmap_controller.on_finish_callbacks.append(callback)
+
+    def execute_chain(self, commands: List[str], on_finish: Optional[Callable[[bool, str], None]] = None) -> None:
+        """
+        Thực thi một chuỗi các hành động liên tiếp trong một background thread.
+        Nếu gặp lệnh Xmap, sẽ tự động chờ nhân vật đến đúng map đích rồi mới tiếp tục các bước kế tiếp.
+        """
+        def _chain_worker():
+            from .command_handler import execute_client_command
+            tag = getattr(self, "account_id", "Client")
+            for idx, cmd in enumerate(commands):
+                cmd_clean = cmd.strip()
+                if not cmd_clean:
+                    continue
+                parts = cmd_clean.split()
+                head = parts[0].lower()
+
+                if head == "xmap":
+                    execute_client_command(self, cmd_clean)
+                    time.sleep(0.6)
+                    start_t = time.time()
+                    timeout = 180.0
+                    while getattr(self.xmap_controller, "is_running", False) and (time.time() - start_t < timeout):
+                        time.sleep(0.4)
+                    time.sleep(1.0)
+                elif head == "zone" and len(parts) > 1 and parts[1].lower() in ("min", "least", "itnguoi", "vang"):
+                    self.change_to_least_populated_zone()
+                    time.sleep(0.6)
+                else:
+                    execute_client_command(self, cmd_clean)
+                    time.sleep(0.5)
+
+            if on_finish:
+                try:
+                    on_finish(True, f"Đã hoàn thành chuỗi {len(commands)} lệnh cho [{tag}]")
+                except Exception:
+                    pass
+
+        t = threading.Thread(target=_chain_worker, daemon=True, name=f"ChainWorker-{getattr(self, 'account_id', 'Client')}")
+        t.start()
 
     # --------------------------------------------------------------------------
     # Các hàm hồi sinh nhân vật (Mô phỏng Service.wakeUpFromDead & returnTownFromDead)

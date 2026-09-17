@@ -42,16 +42,24 @@ class AutoReviveManager:
             )
             self._thread.start()
 
+    def _log(self, msg: str, is_alert: bool = False) -> None:
+        from .logger import logger
+        tag = getattr(self.client, "account_id", "AutoRevive") if self.client else "AutoRevive"
+        if is_alert:
+            logger.alert(msg, account_tag=tag)
+        else:
+            logger.auto(msg, account_tag=tag)
+
     def enable(self) -> None:
         """Bật tính năng Auto Hồi Sinh."""
         self.is_enabled = True
         mode_str = "bằng Ngọc tại chỗ (cmd -16)" if self.mode == self.MODE_GEM else "về Thành (cmd -15)"
-        print(f"[*] [AutoRevive] Auto Hồi Sinh: BẬT [{mode_str}]!")
+        self._log(f"[AutoRevive] Auto Hồi Sinh: BẬT [{mode_str}]!")
 
     def disable(self) -> None:
         """Tắt tính năng Auto Hồi Sinh."""
         self.is_enabled = False
-        print(f"[*] [AutoRevive] Auto Hồi Sinh: TẮT!")
+        self._log(f"[AutoRevive] Auto Hồi Sinh: TẮT!")
 
     def toggle(self, enable: Optional[bool] = None) -> bool:
         """Bật / Tắt tính năng Auto Hồi Sinh."""
@@ -62,9 +70,9 @@ class AutoReviveManager:
 
         if self.is_enabled:
             mode_str = "bằng Ngọc tại chỗ" if self.mode == self.MODE_GEM else "về Thành"
-            print(f"[*] [AutoRevive] Auto Hồi Sinh: BẬT [{mode_str}]!")
+            self._log(f"[AutoRevive] Auto Hồi Sinh: BẬT [{mode_str}]!")
         else:
-            print("[*] [AutoRevive] Auto Hồi Sinh: TẮT!")
+            self._log("[AutoRevive] Auto Hồi Sinh: TẮT!")
         return self.is_enabled
 
     def set_mode(self, mode: str) -> bool:
@@ -75,11 +83,11 @@ class AutoReviveManager:
         m = mode.lower().strip()
         if m in ("gem", "ngoc", "place", "here", "1"):
             self.mode = self.MODE_GEM
-            print("[*] [AutoRevive] Đã chuyển chế độ: Hồi sinh bằng Ngọc tại chỗ (cmd -16)!")
+            self._log("[AutoRevive] Đã chuyển chế độ: Hồi sinh bằng Ngọc tại chỗ (cmd -16)!")
             return True
         elif m in ("town", "ve", "thanh", "nha", "home", "0"):
             self.mode = self.MODE_TOWN
-            print("[*] [AutoRevive] Đã chuyển chế độ: Hồi sinh về Thành / Nhà (cmd -15)!")
+            self._log("[AutoRevive] Đã chuyển chế độ: Hồi sinh về Thành / Nhà (cmd -15)!")
             return True
         return False
 
@@ -88,10 +96,13 @@ class AutoReviveManager:
         if not self.client or not hasattr(self.client, "myChar") or not self.client.myChar:
             return False
         c = self.client.myChar
-        return (c.cHPFull > 0 and c.cHP <= 0) or getattr(c, "statusMe", 1) == 14
+        is_hp_zero = (c.cHPFull > 0 and c.cHP <= 0)
+        is_die_flag = getattr(c, "isDie", False)
+        is_status_die = (getattr(c, "statusMe", 1) == 14)
+        return is_hp_zero or is_die_flag or is_status_die
 
-    def _execute_revive(self) -> None:
-        """Thực hiện gửi gói tin hồi sinh lên server."""
+    def revive(self) -> None:
+        """Thực hiện lệnh gửi hồi sinh lên server."""
         if not self.client or not hasattr(self.client, "service"):
             return
 
@@ -99,15 +110,17 @@ class AutoReviveManager:
         self.last_revive_time = time.time()
 
         if self.mode == self.MODE_GEM:
-            print(
-                f"[*] [AutoRevive] Nhân vật đã bị hạ gục! "
-                f"Tự động hồi sinh tại chỗ bằng 1 Ngọc (cmd -16) [lần #{self.revive_count}]..."
+            self._log(
+                f"[AutoRevive] Nhân vật đã bị hạ gục! "
+                f"Tự động hồi sinh tại chỗ bằng 1 Ngọc (cmd -16) [lần #{self.revive_count}]...",
+                is_alert=True,
             )
             self.client.service.wakeUpFromDead()
         else:
-            print(
-                f"[*] [AutoRevive] Nhân vật đã bị hạ gục! "
-                f"Tự động hồi sinh về Thành (cmd -15) [lần #{self.revive_count}]..."
+            self._log(
+                f"[AutoRevive] Nhân vật đã bị hạ gục! "
+                f"Tự động hồi sinh về Thành (cmd -15) [lần #{self.revive_count}]...",
+                is_alert=True,
             )
             self.client.service.returnTownFromDead()
 
