@@ -20,7 +20,7 @@
     "enabled": false,
     "token": "YOUR_TELEGRAM_BOT_TOKEN",
     "allowed_chat_ids": [],
-    "notify_boss": true,
+    "notify_boss": false,
     "notify_disconnect": true,
     "notify_login": true
   },

@@ -146,7 +146,7 @@ def main():
                 token=token,
                 account_manager=mgr,
                 allowed_chat_ids=mgr.telegram_config.get("allowed_chat_ids", []),
-                notify_boss=mgr.telegram_config.get("notify_boss", True),
+                notify_boss=mgr.telegram_config.get("notify_boss", False),
                 notify_disconnect=mgr.telegram_config.get("notify_disconnect", True),
                 notify_login=mgr.telegram_config.get("notify_login", True),
                 ai_enabled=ai_cfg.get("enabled", True),

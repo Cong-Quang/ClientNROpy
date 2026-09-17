@@ -158,7 +158,7 @@ class TelegramAIBot:
         token: str,
         account_manager=None,
         allowed_chat_ids: Optional[List[Union[int, str]]] = None,
-        notify_boss: bool = True,
+        notify_boss: bool = False,
         notify_disconnect: bool = True,
         notify_login: bool = True,
         ai_enabled: bool = True,
@@ -200,6 +200,14 @@ class TelegramAIBot:
         self._running: bool = False
         self._thread: Optional[threading.Thread] = None
         self._last_update_id: int = 0
+        # Sức khỏe vòng polling nhận lệnh (để chẩn đoán khi bot gửi được mà không trả lời)
+        self._last_poll_ok: float = 0.0
+        self._last_poll_error: str = ""
+        self._poll_updates: int = 0
+        # Mạng NAT thường cắt kết nối treo lâu: giữ long-poll ngắn (10s),
+        # thất bại liên tiếp sẽ tự hạ về short-poll (timeout=0).
+        self._poll_hold: int = 10
+        self._poll_fail_streak: int = 0
         self._lock = threading.Lock()
 
     # --------------------------------------------------------------------------
@@ -270,7 +278,7 @@ class TelegramAIBot:
         except urllib.error.HTTPError as he:
             err_msg = he.read().decode("utf-8", errors="replace")
             logger.debug(f"[Telegram API Error] {method} HTTP {he.code}: {err_msg}")
-            return None
+            return {"ok": False, "error_code": he.code, "description": err_msg[:300]}
         except Exception as ex:
             logger.debug(f"[Telegram API Error] {method}: {ex}")
             return None
@@ -1088,6 +1096,34 @@ class TelegramAIBot:
             return
 
         # ----------------------------------------------------------------------
+        # G2. Bật/Tắt thông báo tự động (boss / vào game / mất mạng)
+        # ----------------------------------------------------------------------
+        if first_token in ("notify", "thongbao", "tb"):
+            if not sub_args:
+                st = self.account_manager.get_notify_status()
+                self.send_message(
+                    chat_id,
+                    f"= *THÔNG BÁO TỰ ĐỘNG HIỆN TẠI:*\n> {st}\n"
+                    "Cú pháp: `/notify <boss|login|dis> <on|off>`\n"
+                    "Vd: `/notify boss off` (chỉ xem boss khi gõ `/boss`)",
+                )
+                return
+            if len(sub_args) < 2:
+                self.send_message(chat_id, "Cú pháp: `/notify <boss|login|dis> <on|off>`")
+                return
+            kind = sub_args[0].lower()
+            val = sub_args[1].lower()
+            if val in ("on", "1", "bat", "enable"):
+                ok, msg = self.account_manager.set_notify_and_save(kind, True)
+            elif val in ("off", "0", "tat", "disable"):
+                ok, msg = self.account_manager.set_notify_and_save(kind, False)
+            else:
+                self.send_message(chat_id, "Cú pháp: `/notify <boss|login|dis> <on|off>`")
+                return
+            self.send_message(chat_id, f"{'[=]' if ok else '[x]'} {msg}")
+            return
+
+        # ----------------------------------------------------------------------
         # H. Toàn bộ các lệnh điều khiển CLI trực tiếp
         # ----------------------------------------------------------------------
         direct_commands = {
@@ -1158,7 +1194,8 @@ class TelegramAIBot:
             "= *6. ĐA TÀI KHOẢN & HỆ THỐNG:*\n"
             "> `/acc <id> <lệnh>` : lệnh cho 1 acc (vd: `/acc 1 goto 112 min ts`, gõ tắt `/1 goto 112 min ts`)\n"
             "> `/all <lệnh>` : lệnh cho toàn bộ acc (vd: `/all hunt on`)\n"
-            "> `/reconnect now` : kết nối lại ngay | `/chat <nội dung>` : chat vào game\n\n"
+            "> `/reconnect now` : kết nối lại ngay | `/chat <nội dung>` : chat vào game\n"
+            "> `/notify <boss|login|dis> <on|off>` : bật/tắt thông báo tự động\n\n"
             "= *7. TRỢ LÝ AI (nhắn tiếng Việt tự nhiên):*\n"
             "> _'cho poopooi02 ra map 112 khu vắng rồi tansat'_\n"
             "> _'hentaiz còn bao nhiêu hp?'_ | _'bật săn boss lên'_\n"
@@ -1481,13 +1518,19 @@ class TelegramAIBot:
     def _poll_worker(self) -> None:
         logger.system(f"Telegram Bot (@nroPy_Bot) đã khởi động! Đang lắng nghe tin nhắn...")
         while self._running:
+            # Mạng NAT siết chặt có thể cắt kết nối treo lâu: thất bại liên tiếp
+            # thì tự hạ về short-poll (timeout=0, hỏi nhanh từng giây) để vẫn nhận lệnh.
+            eff_hold = 0 if self._poll_fail_streak >= 3 else self._poll_hold
             try:
                 payload = {
                     "offset": self._last_update_id + 1,
-                    "timeout": 20,
+                    "timeout": eff_hold,
                 }
-                res = self._api_call("getUpdates", payload, timeout=30)
+                res = self._api_call("getUpdates", payload, timeout=eff_hold + 15)
                 if res and res.get("ok"):
+                    self._poll_fail_streak = 0
+                    self._last_poll_ok = time.time()
+                    self._last_poll_error = ""
                     updates = res.get("result", [])
                     for update in updates:
                         up_id = update.get("update_id", 0)
@@ -1495,12 +1538,31 @@ class TelegramAIBot:
                             self._last_update_id = up_id
                         msg = update.get("message") or update.get("channel_post")
                         if msg:
-                            self._handle_incoming_message(msg)
+                            try:
+                                self._handle_incoming_message(msg)
+                            except Exception as ex_msg:
+                                logger.error(f"[Telegram] Lỗi xử lý tin nhắn: {ex_msg}")
+                            self._poll_updates += 1
+                    if eff_hold == 0:
+                        time.sleep(1.0)  # short-poll: nghỉ 1s tránh spam API
                 else:
-                    time.sleep(2.0)
+                    self._poll_fail_streak += 1
+                    err_code = (res or {}).get("error_code")
+                    desc = (res or {}).get("description") or "mất mạng/timeout"
+                    new_err = f"HTTP {err_code}: {desc}" if err_code else f"getUpdates thất bại ({desc})"
+                    if new_err != self._last_poll_error:
+                        self._last_poll_error = new_err
+                        if err_code == 409:
+                            logger.error("[Telegram] 409 CONFLICT: có nơi khác đang lấy tin nhắn (2 bot cùng token hoặc webhook đang bật). VPS này sẽ KHÔNG nhận được lệnh!")
+                        else:
+                            logger.warn(f"[Telegram] Polling lỗi: {new_err}. Đang thử lại...")
+                    time.sleep(10.0 if err_code == 409 else 2.0)
             except Exception as ex:
-                logger.debug(f"[Telegram Polling Exception] {ex}")
-                time.sleep(5.0)
+                self._poll_fail_streak += 1
+                if self._last_poll_error != str(ex):
+                    self._last_poll_error = str(ex)
+                    logger.warn(f"[Telegram Polling Exception] {ex}")
+                time.sleep(2.0)
 
     def start(self) -> None:
         """Khởi động Telegram Bot trong background thread."""

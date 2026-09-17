@@ -224,7 +224,7 @@ class AccountManager:
             "enabled": True,
             "token": "8850708704:AAFg-R7uIx3rZ44jPvHCs8wAAeEssvcO-xo",
             "allowed_chat_ids": [],
-            "notify_boss": True,
+                "notify_boss": False,
             "notify_disconnect": True,
             "notify_login": True,
         }
@@ -398,7 +398,7 @@ class AccountManager:
                 "enabled": True,
                 "token": "8850708704:AAFg-R7uIx3rZ44jPvHCs8wAAeEssvcO-xo",
                 "allowed_chat_ids": [],
-                "notify_boss": True,
+            "notify_boss": False,
                 "notify_disconnect": True,
                 "notify_login": True,
             },
@@ -645,6 +645,35 @@ class AccountManager:
         self.proxy_pool.set_use_proxy(enable)
         self.save_settings_file()
         return True, f"Đã {'BẬT' if enable else 'TẮT'} chế độ Proxy!"
+
+    NOTIFY_KEYS = {
+        "boss": ("notify_boss", "Boss xuất hiện/bị diệt"),
+        "login": ("notify_login", "Vào game / kết nối lại"),
+        "dis": ("notify_disconnect", "Mất kết nối"),
+        "disconnect": ("notify_disconnect", "Mất kết nối"),
+        "matmang": ("notify_disconnect", "Mất kết nối"),
+    }
+
+    def set_notify_and_save(self, kind: str, enable: bool) -> Tuple[bool, str]:
+        """Bật/Tắt 1 loại thông báo Telegram, áp dụng ngay và lưu settings.json."""
+        found = self.NOTIFY_KEYS.get(kind.strip().lower())
+        if not found:
+            return False, f"Loại thông báo không hợp lệ: '{kind}'! Dùng: boss | login | dis"
+        key, label = found
+        self.telegram_config[key] = enable
+        bot = getattr(self, "telegram_bot", None)
+        if bot is not None:
+            setattr(bot, key, enable)
+        self.save_settings_file()
+        return True, f"Đã {'BẬT' if enable else 'TẮT'} thông báo: {label}!"
+
+    def get_notify_status(self) -> str:
+        """Chuỗi trạng thái các loại thông báo Telegram."""
+        seen = []
+        for key, label in [("notify_boss", "Boss"), ("notify_login", "Vào game"), ("notify_disconnect", "Mất mạng")]:
+            st = "BẬT" if self.telegram_config.get(key, False) else "TẮT"
+            seen.append(f"{label}: {st}")
+        return " | ".join(seen)
 
     def get_account(self, identifier: Union[int, str]) -> Optional[AccountInstance]:
         """

@@ -412,6 +412,57 @@ def execute_client_command(client: ClientNRO, line: str) -> bool:
     return True
 
 
+def _telegram_nettest(bot) -> None:
+    """Chẩn đoán từng tầng đường ra Internet tới Telegram API: DNS -> TCP 443 -> TLS -> getMe."""
+    import socket
+    import ssl
+
+    host = "api.telegram.org"
+    print(f"[*] Kiểm tra kết nối tới {host} ...")
+    for var in ("HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy"):
+        val = os.environ.get(var)
+        if val:
+            print(f"    - Proxy hệ thống: {var}={val}")
+
+    try:
+        ip = socket.getaddrinfo(host, 443, type=socket.SOCK_STREAM)[0][4][0]
+        print(f"    [1] DNS: OK ({host} -> {ip})")
+    except Exception as ex:
+        print(f"    [1] DNS: FAIL ({ex}) — VPS không phân giải được tên miền!")
+        return
+
+    try:
+        t0 = time.time()
+        sock = socket.create_connection((host, 443), timeout=10)
+        print(f"    [2] TCP 443: OK ({int((time.time() - t0) * 1000)}ms)")
+    except Exception as ex:
+        print(f"    [2] TCP 443: FAIL ({ex}) — NAT/firewall chặn cổng 443!")
+        return
+
+    try:
+        ctx = ssl.create_default_context()
+        t0 = time.time()
+        tls_sock = ctx.wrap_socket(sock, server_hostname=host)
+        print(f"    [3] TLS: OK ({tls_sock.version()}, {tls_sock.cipher()[0]}, {int((time.time() - t0) * 1000)}ms)")
+        tls_sock.close()
+    except Exception as ex:
+        print(f"    [3] TLS: FAIL ({ex}) — gãy bắt tay TLS!")
+        try:
+            sock.close()
+        except Exception:
+            pass
+        return
+
+    try:
+        res = bot._api_call("getMe", {}, timeout=15) or {}
+        if res.get("ok"):
+            print(f"    [4] API getMe: OK (@{res.get('result', {}).get('username')}) — token hợp lệ!")
+        else:
+            print(f"    [4] API getMe: FAIL ({res}) — token sai hoặc bot đã bị xóa!")
+    except Exception as ex:
+        print(f"    [4] API getMe: FAIL ({ex})")
+
+
 def execute_multi_command(
     account_manager,
     active_target: Optional[Union[str, int]],
@@ -551,10 +602,59 @@ def execute_multi_command(
             print(f"    - Bot username:    @nroPy_Bot")
             print(f"    - Người nhận active: {len(bot.active_chat_ids)} người")
             print(f"    - Trợ lý AI:       {ai_str}")
-            print(f"    - Cú pháp:         telegram send <nội dung> (gửi tin nhắn tới toàn bộ chat)")
+            last_ok = getattr(bot, "_last_poll_ok", 0) or 0
+            last_err = getattr(bot, "_last_poll_error", "") or ""
+            upd = getattr(bot, "_poll_updates", 0) or 0
+            if last_ok:
+                print(f"    - Polling nhận lệnh: OK (lần cuối {int(time.time() - last_ok)}s trước, đã xử lý {upd} tin)")
+            else:
+                print(f"    - Polling nhận lệnh: CHƯA NHẬN ĐƯỢC TIN NÀO (đã xử lý {upd} tin)")
+            if last_err:
+                print(f"    - Lỗi polling gần nhất: {last_err}")
+            streak = getattr(bot, "_poll_fail_streak", 0) or 0
+            hold = getattr(bot, "_poll_hold", 10) or 10
+            mode = "short-poll (mạng NAT)" if streak >= 3 else f"long-poll ({hold}s)"
+            print(f"    - Chế độ polling: {mode}")
+            print(f"    - Cú pháp:         telegram send <nội dung> | telegram webhook | telegram delwebhook | telegram test")
             return True, active_target
 
         sub = args[0].lower()
+        if sub in ("webhook", "wh"):
+            info = bot._api_call("getWebhookInfo", {}, timeout=15) or {}
+            res = info.get("result", {}) if info.get("ok") else {}
+            url = res.get("url", "")
+            print(f"[*] Webhook: {url if url else '(không bật — polling nhận lệnh bình thường)'}")
+            if url:
+                print("    [!] Webhook đang bật sẽ NUỐT tin nhắn, bot không trả lời lệnh!")
+                print("    Gõ 'telegram delwebhook' để tắt.")
+            return True, active_target
+
+        if sub in ("delwebhook", "unhook", "nowebhook"):
+            res = bot._api_call("deleteWebhook", {"drop_pending_updates": True}, timeout=15) or {}
+            print(f"[*] Xóa webhook: {'OK' if res.get('ok') else res}")
+            return True, active_target
+
+        if sub in ("test", "nettest", "check", "diag"):
+            _telegram_nettest(bot)
+            return True, active_target
+
+        if sub in ("notify", "thongbao", "tb"):
+            if len(args) < 3:
+                print(f"[*] Thông báo tự động: {account_manager.get_notify_status()}")
+                print("    Cú pháp: telegram notify <boss|login|dis> <on|off>")
+                return True, active_target
+            kind = args[1].lower()
+            val = args[2].lower()
+            if val in ("on", "1", "enable", "true"):
+                ok, msg = account_manager.set_notify_and_save(kind, True)
+            elif val in ("off", "0", "disable", "false"):
+                ok, msg = account_manager.set_notify_and_save(kind, False)
+            else:
+                print("    Cú pháp: telegram notify <boss|login|dis> <on|off>")
+                return True, active_target
+            print(f"[*] {msg}")
+            return True, active_target
+
         if sub in ("send", "bc", "broadcast"):
             msg = " ".join(args[1:]) if len(args) > 1 else "Thông báo thử nghiệm từ ClientNROpy!"
             bot.broadcast_message(f"= [CONSOLE]: {msg}")
