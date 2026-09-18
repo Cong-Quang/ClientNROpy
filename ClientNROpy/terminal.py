@@ -36,10 +36,10 @@ def interactive_cli(account_manager, default_target: Optional[Union[int, str]] =
             inst = account_manager.get_account(active_target)
             if inst:
                 cname = inst.char_name if inst.char_name != "Chưa vào" else inst.config.username
-                st_icon = "=" if inst.status == "ONLINE" else (">" if inst.status == "CONNECTING" else ":")
-                prompt = f"nro[#{inst.config.acc_id}:{cname} {st_icon}]> "
+                st_tag = "ON" if inst.status == "ONLINE" else ("~" if inst.status in ("CONNECTING", "RECONNECTING") else "OFF")
+                prompt = f"nro[#{inst.config.acc_id}:{cname} | {st_tag}]> "
             else:
-                prompt = f"nro[acc:{active_target}]> "
+                prompt = f"nro[acc:{active_target} | ?]> "
 
         try:
             line = input(prompt).strip()

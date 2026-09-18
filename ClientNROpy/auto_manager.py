@@ -35,6 +35,7 @@ from .waypoint import Waypoint
 from .xmap.map_data import MAP_NAMES, get_map_name, normalize_str, resolve_map_id
 from .auto_train_pet import AutoTrainPet, AutoTrainPetMode, AutoTrainPetAttackMode
 from .auto_train_new_account import AutoTrainNewAccount
+from .game_data import get_item_name, format_big_number, SKILL_NAMES
 
 
 # ==============================================================================
@@ -102,6 +103,172 @@ class AutoQuestState(Enum):
 
 
 # ==============================================================================
+# BỘ ĐIỀU PHỐI SĂN BOSS & CHIA KHU ĐA TÀI KHOẢN (SHARED HUNT COORDINATOR)
+# ==============================================================================
+class SharedHuntCoordinator:
+    """
+    Bộ điều phối săn Boss và chia việc dò khu vực giữa nhiều tài khoản.
+    Đảm bảo:
+    1. Không có 2 acc quét trùng 1 khu cùng lúc (chia việc thông minh).
+    2. Khi 1 acc phát hiện Boss trong khu X:
+       - Cập nhật vị trí Boss (map_id, zone_id, pos).
+       - Thông báo cho toàn bộ các acc còn lại cùng bay vào khu X để tập hợp pem Boss và nhặt đồ.
+    3. Khi Boss chết:
+       - Toàn bộ các acc chuyển sang trạng thái nhặt đồ (looting) rồi tìm mục tiêu mới.
+    """
+    _lock = threading.RLock()
+    _managers: Set[Any] = set()
+    _zone_claims: Dict[int, Dict[int, Dict[str, Any]]] = {}  # map_id -> zone_id -> info
+    _active_bosses: Dict[str, Dict[str, Any]] = {}          # norm_boss_name -> info
+
+    @classmethod
+    def register(cls, manager: Any) -> None:
+        with cls._lock:
+            cls._managers.add(manager)
+
+    @classmethod
+    def unregister(cls, manager: Any) -> None:
+        with cls._lock:
+            cls._managers.discard(manager)
+
+    @classmethod
+    def claim_next_zone(
+        cls,
+        acc_tag: str,
+        map_id: int,
+        available_zones: List[int],
+        exclude_zones: Optional[Set[int]] = None,
+        current_zone: int = -1,
+    ) -> Optional[int]:
+        """Tìm và giữ chỗ (claim) khu tiếp theo chưa có ai quét, tránh trùng lặp giữa các acc."""
+        with cls._lock:
+            now = time.time()
+            if map_id not in cls._zone_claims:
+                cls._zone_claims[map_id] = {}
+
+            claims = cls._zone_claims[map_id]
+            excluded = exclude_zones or set()
+
+            valid_zones = [z for z in available_zones if z != current_zone and z not in excluded]
+            if not valid_zones:
+                return None
+
+            free_zones = []
+            for z in valid_zones:
+                c = claims.get(z)
+                if not c:
+                    free_zones.append((z, 0.0))
+                elif c.get("claimed_by") == acc_tag:
+                    free_zones.append((z, c.get("last_scanned_time", 0.0)))
+                elif (now - c.get("claim_time", 0.0)) >= 12.0:
+                    free_zones.append((z, c.get("last_scanned_time", 0.0)))
+
+            if not free_zones:
+                return None
+
+            free_zones.sort(key=lambda item: item[1])
+            acc_offset = abs(hash(acc_tag)) % max(1, len(free_zones))
+            best_zone = free_zones[acc_offset % len(free_zones)][0]
+
+            claims[best_zone] = {
+                "claimed_by": acc_tag,
+                "claim_time": now,
+                "last_scanned_time": claims.get(best_zone, {}).get("last_scanned_time", 0.0),
+            }
+            return best_zone
+
+    @classmethod
+    def release_zone(cls, acc_tag: str, map_id: int, zone_id: int, scanned: bool = True) -> None:
+        """Giải phóng khu và cập nhật thời điểm đã quét xong."""
+        with cls._lock:
+            now = time.time()
+            if map_id in cls._zone_claims and zone_id in cls._zone_claims[map_id]:
+                c = cls._zone_claims[map_id][zone_id]
+                if scanned:
+                    c["last_scanned_time"] = now
+                if c.get("claimed_by") == acc_tag:
+                    c["claimed_by"] = ""
+                    c["claim_time"] = 0.0
+
+    @classmethod
+    def report_boss_found(
+        cls,
+        reporter_mgr: Any,
+        boss: Boss,
+        map_id: int,
+        zone_id: int,
+        pos: Tuple[int, int],
+    ) -> None:
+        """Báo cáo đã tìm thấy Boss để toàn bộ các acc cùng bay vào khu pem Boss."""
+        with cls._lock:
+            now = time.time()
+            b_norm = normalize_str(boss.name)
+            cls._active_bosses[b_norm] = {
+                "name": boss.name,
+                "map_id": map_id,
+                "zone_id": zone_id,
+                "pos": pos,
+                "found_by": reporter_mgr._tag(),
+                "found_time": now,
+                "is_died": False,
+            }
+            for mgr in list(cls._managers):
+                if mgr is not reporter_mgr:
+                    try:
+                        mgr.notify_boss_spotted(boss, map_id, zone_id, pos, reporter_tag=reporter_mgr._tag())
+                    except Exception:
+                        pass
+
+    @classmethod
+    def report_boss_died(
+        cls,
+        reporter_mgr: Any,
+        boss_name: str,
+        map_id: int,
+        zone_id: int,
+    ) -> None:
+        """Báo cáo Boss đã chết để toàn bộ các acc cùng chuyển sang trạng thái nhặt đồ."""
+        with cls._lock:
+            b_norm = normalize_str(boss_name)
+            if b_norm in cls._active_bosses:
+                cls._active_bosses[b_norm]["is_died"] = True
+            for mgr in list(cls._managers):
+                if mgr is not reporter_mgr:
+                    try:
+                        mgr.notify_boss_killed(boss_name, map_id, zone_id, reporter_tag=reporter_mgr._tag())
+                    except Exception:
+                        pass
+
+    @classmethod
+    def get_active_boss(cls, boss_name: str) -> Optional[Dict[str, Any]]:
+        """Lấy thông tin vị trí Boss đang còn sống nếu đã có acc tìm thấy gần đây."""
+        with cls._lock:
+            b_norm = normalize_str(boss_name)
+            info = cls._active_bosses.get(b_norm)
+            if info and not info.get("is_died", False):
+                if (time.time() - info.get("found_time", 0.0)) < 90.0:
+                    return info
+            return None
+
+    @classmethod
+    def clear_boss(cls, boss_name: str) -> None:
+        with cls._lock:
+            b_norm = normalize_str(boss_name)
+            cls._active_bosses.pop(b_norm, None)
+
+    @classmethod
+    def get_active_scanners_count(cls, map_id: int) -> int:
+        with cls._lock:
+            now = time.time()
+            claims = cls._zone_claims.get(map_id, {})
+            scanners = set()
+            for z, data in claims.items():
+                if data.get("claimed_by") and (now - data.get("claim_time", 0.0)) < 12.0:
+                    scanners.add(data.get("claimed_by"))
+            return len(scanners)
+
+
+# ==============================================================================
 # CLASS TRUNG TÂM: AUTOMANAGER (UNIFIED AUTO ENGINE)
 # ==============================================================================
 class AutoManager:
@@ -139,6 +306,17 @@ class AutoManager:
         1: (12, 3, 2),   # Namek: trứng, masenko, đấm
         2: (13, 5, 4),   # Xayda: hoá hình, atomic, đấm
     }
+
+    # Hằng số Săn Boss & Giám sát HP & Nhặt đồ (C# AutoFarmBossNappa)
+    BOSS_NO_DAMAGE_TIMEOUT_S: float = 10.0
+    HP_CHECK_INTERVAL_S: float = 2.0
+    MAX_CONSECUTIVE_NO_DAMAGE: int = 5
+    MAX_CONSECUTIVE_NO_DAMAGE_IN_FIGHT: int = 3
+    WAIT_AFTER_BOSS_DEATH_S: float = 2.0
+    PICK_ITEM_DELAY_S: float = 0.8
+    MAX_PICK_ATTEMPTS: int = 5
+    GANG_THIEN_SU_ITEM_ID: int = 1070
+    FORBIDDEN_COMBAT_SKILLS: Set[int] = {10, 11, 14}  # Tuyệt đối không dùng QCKK (10), Makankosappo (11), Tự sát (14)
 
     # Bóc tách thông báo Boss ChatVip
     STR_BOSS_APPEARED: List[str] = [
@@ -182,6 +360,8 @@ class AutoManager:
         self.target_char_names: Set[str] = set()
         self.target_char_ids: Set[int] = set()
         self.tansat_skill_id: Optional[int] = None
+        self.combat_combo_skills: Optional[List[int]] = None
+        self._combo_skill_idx: int = 0
         self._skill_last_use: Dict[int, float] = {}
         self.last_attack_time: float = 0.0
 
@@ -219,6 +399,27 @@ class AutoManager:
         self.last_boss_pos: Optional[Tuple[int, int]] = None
         self.looting_start_time: float = 0.0
         self.bh_status_message: str = "Đang chờ lệnh hoặc thông báo Boss mới..."
+
+        # Thống kê săn boss và đồ loot
+        self.boss_kill_count: int = 0
+        self.boss_looted_items_count: int = 0
+        self.boss_kill_history: List[Dict[str, Any]] = []
+
+        # Giám sát HP Boss & Phát hiện Boss ảo/kẹt (C# AutoFarmBossNappa)
+        self.boss_entry_time: float = 0.0
+        self.boss_damaged: bool = False
+        self.last_boss_hp: int = -1
+        self.last_boss_hp_check_time: float = 0.0
+        self.consecutive_no_damage_count: int = 0
+
+        # Nhặt đồ Boss rơi (C# AutoFarmBossNappa)
+        self.boss_death_time: float = 0.0
+        self.pick_item_attempts: int = 0
+        self.last_pick_item_time: float = 0.0
+        self.boss_looted_items_history: List[Dict[str, Any]] = []
+
+        # Đăng ký với bộ điều phối săn Boss đa tài khoản
+        SharedHuntCoordinator.register(self)
 
         # ----------------------------------------------------------------------
         # 5. Nhiệm vụ Bò Mộng hằng ngày (AutoQuest FSM)
@@ -692,6 +893,23 @@ class AutoManager:
         self.target_mob_ids.clear()
         self.target_mob_types.clear()
 
+    def _reset_boss_fight_tracking(self) -> None:
+        """Đặt lại toàn bộ dữ liệu theo dõi trận đánh Boss."""
+        self.boss_entry_time = 0.0
+        self.boss_damaged = False
+        self.last_boss_hp = -1
+        self.last_boss_hp_check_time = 0.0
+        self.consecutive_no_damage_count = 0
+
+    def set_combo_skills(self, skill_ids: List[int]) -> Tuple[bool, str]:
+        """Cài đặt bộ 3 skill xoay vòng để pem boss / tàn sát (loại trừ QCKK, Makankosappo, Tự sát)."""
+        clean_ids = [int(s) for s in skill_ids if int(s) not in self.FORBIDDEN_COMBAT_SKILLS]
+        if not clean_ids:
+            return False, "Danh sách skill không hợp lệ (không chứa skill cấm QCKK/Makankosappo/Tự sát)!"
+        self.combat_combo_skills = clean_ids
+        names = [f"{sid} ({SKILL_NAMES.get(sid, 'Skill')})" for sid in clean_ids]
+        return True, f"Đã cài đặt combo 3 skill: {' -> '.join(names)}"
+
     def _get_tansat_skill_ids(self) -> tuple:
         my_char = self._get_my_char()
         gender = getattr(my_char, "cgender", 0) if my_char else 0
@@ -701,19 +919,69 @@ class AutoManager:
             gender = 0
         return self.TANSAT_SKILLS_BY_GENDER.get(gender, (0, 2, 4))
 
+    def _select_combat_skill_rotation(self, my_char: Char) -> int:
+        """
+        Xoay vòng combo 3 skill cho 1 boss liên tục đến khi boss chết.
+        Tự động loại bỏ các skill bị cấm: Quả cầu kênh khi (10), Makankosappo (11), Tự sát (14).
+        """
+        if self.combat_combo_skills:
+            candidate_list = [s for s in self.combat_combo_skills if s not in self.FORBIDDEN_COMBAT_SKILLS]
+        else:
+            gender = getattr(my_char, "cgender", 0) if my_char else 0
+            try:
+                gender = int(gender)
+            except Exception:
+                gender = 0
+            candidate_list = list(self.TANSAT_SKILLS_BY_GENDER.get(gender, (0, 2, 4)))
+
+        if not candidate_list:
+            candidate_list = [0]
+
+        now = time.time()
+        num_candidates = len(candidate_list)
+        for offset in range(num_candidates):
+            idx = (self._combo_skill_idx + offset) % num_candidates
+            s_id = candidate_list[idx]
+
+            # Bỏ qua skill cấm nếu lọt vào
+            if s_id in self.FORBIDDEN_COMBAT_SKILLS:
+                continue
+
+            # Kiểm tra Biến hình (13): nếu đã hoá khỉ rồi thì không cần hoá lại
+            if s_id == 13 and getattr(my_char, "isMonkey", 0) > 0:
+                continue
+
+            # Kiểm tra năng lượng KI/MP: nếu cMP <= 15 và không phải chiêu đấm cơ bản (0, 2, 4)
+            if s_id not in (0, 2, 4) and getattr(my_char, "cMP", 100) < 15:
+                continue
+
+            # Cooldown theo loại skill:
+            cd = 0.0
+            if s_id in (1, 3, 5):      # Chưởng Kamejoko / Masenko / Antomic
+                cd = 1.2
+            elif s_id in (9, 17, 25):  # Kaioken, Liên hoàn, Cađíc liên hoàn
+                cd = 4.0
+            elif s_id in (12, 13):     # Đẻ trứng, Biến hình
+                cd = 25.0
+
+            last_used = self._skill_last_use.get(s_id, 0.0)
+            if (now - last_used) >= cd:
+                self._combo_skill_idx = (idx + 1) % num_candidates
+                return s_id
+
+        # Fallback về chiêu đấm cơ bản (luôn sẵn sàng 0s CD)
+        return candidate_list[-1]
+
     def _pick_attack_skill(self) -> Optional[int]:
         if self.tansat_skill_id is not None:
             return self.tansat_skill_id
         my_char = self._get_my_char()
-        if my_char:
-            current_skill = getattr(my_char, "skillTemplateId", 0)
-            if current_skill > 0:
-                return current_skill
-        candidates = self._get_tansat_skill_ids()
-        return candidates[-1] if candidates else None
+        if not my_char:
+            return 0
+        return self._select_combat_skill_rotation(my_char)
 
     def attack_target(self, target: Any = None) -> bool:
-        """Tấn công mục tiêu (hoặc mục tiêu đang focus)."""
+        """Tấn công mục tiêu (hoặc mục tiêu đang focus) với xoay skill combo."""
         my_char = self._get_my_char()
         svc = self._service()
         if not my_char or not svc:
@@ -746,6 +1014,7 @@ class AutoManager:
                     my_char.skillTemplateId = skill_id
             except Exception:
                 pass
+            self._skill_last_use[skill_id] = time.time()
 
         try:
             svc.sendPlayerAttack(vMob=vMob, vChar=vChar)
@@ -1294,78 +1563,195 @@ class AutoManager:
             self.bh_state = self.STATE_BH_IDLE
             return
 
-        # Kiểm tra ngay nếu Boss có ở khu hiện tại
-        found = self._find_boss_in_current_map(my_char)
-        if found is not None:
-            self.current_boss.zone_id = getattr(my_char.mapInfo, "zoneID", 0)
-            if hasattr(found, "cName"):
-                self.current_boss.name = found.cName
-            self._log_auto(f"ĐÃ TÌM THẤY BOSS '{self.current_boss.name}' tại Khu {self.current_boss.zone_id}!", is_important=True)
-            self.bh_state = self.STATE_BH_COMBAT
-            return
+        curr_map_id = getattr(my_char.mapInfo, "mapID", -1)
+        curr_zone_id = getattr(my_char.mapInfo, "zoneID", -1)
 
-        # Quét lần lượt các khu
-        zones = my_char.mapInfo.zones
-        zone_ids = [z.zoneId for z in zones if z.zoneId > 0] if zones else list(range(1, 25))
-
-        for khu in zone_ids:
-            if not self.is_boss_hunter_enabled or not self.current_boss:
-                return
-            if khu == getattr(my_char.mapInfo, "zoneID", -1):
-                continue
-
-            if self.client and hasattr(self.client, "change_zone"):
-                self.client.change_zone(khu)
-                delay = random.uniform(self.min_scan_zone_delay, self.max_scan_zone_delay)
-                time.sleep(delay)
-
-            found = self._find_boss_in_current_map(my_char)
-            if found is not None:
-                self.current_boss.zone_id = khu
-                if hasattr(found, "cName"):
-                    self.current_boss.name = found.cName
-                self._log_auto(f"ĐÃ TÌM THẤY BOSS '{self.current_boss.name}' tại Khu {khu}!", is_important=True)
+        # 1. Kiểm tra xem đã có đồng đội tìm thấy Boss này ở map hiện tại chưa
+        active_boss = SharedHuntCoordinator.get_active_boss(self.current_boss.name)
+        if active_boss and active_boss.get("map_id") == curr_map_id and not active_boss.get("is_died", False):
+            target_zone = active_boss.get("zone_id", -1)
+            if target_zone >= 0:
+                self.current_boss.zone_id = target_zone
+                if curr_zone_id != target_zone:
+                    self._log_auto(f"[~] Đồng đội đã tìm thấy Boss '{self.current_boss.name}' ở Khu {target_zone}! Chuyển khu tới pem...", is_important=True)
+                    if self.client and hasattr(self.client, "change_zone"):
+                        self.client.change_zone(target_zone)
+                self._reset_boss_fight_tracking()
                 self.bh_state = self.STATE_BH_COMBAT
                 return
 
-        # Đã quét hết map mà không thấy
-        if self.current_boss.name == "Boss Tuần Tra":
-            self.patrol_map_index += 1
-            self.bh_state = self.STATE_BH_PATROL
+        # 2. Kiểm tra ngay nếu Boss có ở khu hiện tại
+        found = self._find_boss_in_current_map(my_char)
+        if found is not None:
+            self.current_boss.zone_id = curr_zone_id
+            if hasattr(found, "cName"):
+                self.current_boss.name = found.cName
+            target_x = getattr(found, "cx", getattr(found, "x", my_char.cx))
+            target_y = getattr(found, "cy", getattr(found, "y", my_char.cy))
+            self.last_boss_pos = (target_x, target_y)
+            self._log_auto(f"[+] PHÁT HIỆN BOSS '{self.current_boss.name}' tại Khu {curr_zone_id}! Báo toàn đội cùng pem!", is_important=True)
+            SharedHuntCoordinator.report_boss_found(self, self.current_boss, curr_map_id, curr_zone_id, (target_x, target_y))
+            self._reset_boss_fight_tracking()
+            self.bh_state = self.STATE_BH_COMBAT
+            return
+
+        # 3. Chia việc dò khu thông minh với SharedHuntCoordinator
+        zones = my_char.mapInfo.zones
+        zone_ids = [z.zoneId for z in zones if z.zoneId > 0] if zones else list(range(1, 25))
+
+        # Claim khu tiếp theo chưa có acc nào quét
+        next_zone = SharedHuntCoordinator.claim_next_zone(
+            self._tag(),
+            curr_map_id,
+            zone_ids,
+            exclude_zones=self.scanned_zones,
+            current_zone=curr_zone_id,
+        )
+
+        if next_zone is not None:
+            self.scanned_zones.add(next_zone)
+            if self.client and hasattr(self.client, "change_zone"):
+                self.client.change_zone(next_zone)
+                delay = random.uniform(self.min_scan_zone_delay, self.max_scan_zone_delay)
+                time.sleep(delay)
+
+            # Cập nhật trạng thái đã quét xong
+            SharedHuntCoordinator.release_zone(self._tag(), curr_map_id, next_zone, scanned=True)
+
+            # Kiểm tra xem boss có ở khu mới này không
+            found = self._find_boss_in_current_map(my_char)
+            if found is not None:
+                self.current_boss.zone_id = next_zone
+                if hasattr(found, "cName"):
+                    self.current_boss.name = found.cName
+                target_x = getattr(found, "cx", getattr(found, "x", my_char.cx))
+                target_y = getattr(found, "cy", getattr(found, "y", my_char.cy))
+                self.last_boss_pos = (target_x, target_y)
+                self._log_auto(f"[+] PHÁT HIỆN BOSS '{self.current_boss.name}' tại Khu {next_zone}! Báo toàn đội cùng pem!", is_important=True)
+                SharedHuntCoordinator.report_boss_found(self, self.current_boss, curr_map_id, next_zone, (target_x, target_y))
+                self._reset_boss_fight_tracking()
+                self.bh_state = self.STATE_BH_COMBAT
+                return
         else:
-            self._log_auto(f"Đã quét hết các khu không thấy Boss '{self.current_boss.name}'. Đánh dấu Boss đã chết!")
-            self.current_boss.is_died = True
-            self.current_boss = None
-            self.bh_state = self.STATE_BH_IDLE
+            # Đã quét hết toàn bộ khu ở map này mà không thấy Boss
+            if self.current_boss.name == "Boss Tuần Tra":
+                self.patrol_map_index += 1
+                self.bh_state = self.STATE_BH_PATROL
+            else:
+                self._log_auto(f"Đã quét hết các khu không thấy Boss '{self.current_boss.name}'. Đánh dấu Boss đã chết!")
+                self.current_boss.is_died = True
+                SharedHuntCoordinator.clear_boss(self.current_boss.name)
+                self.current_boss = None
+                self.bh_state = self.STATE_BH_IDLE
 
     def _handle_bh_combat(self, my_char: Char) -> None:
-        """Đấm Boss (sửa triệt để lỗi _attack_boss_like_tansat)."""
+        """Đấm Boss liên tục bằng combo 3 skill và giám sát HP boss (phát hiện boss ảo/kẹt)."""
         if not self.current_boss:
             self.bh_state = self.STATE_BH_IDLE
             return
 
+        curr_map_id = getattr(my_char.mapInfo, "mapID", -1)
+        curr_zone_id = getattr(my_char.mapInfo, "zoneID", -1)
+
+        # 1. Đảm bảo ở đúng khu vực của Boss
+        if self.current_boss.zone_id >= 0 and curr_zone_id != self.current_boss.zone_id:
+            if self.client and hasattr(self.client, "change_zone"):
+                self.client.change_zone(self.current_boss.zone_id)
+                time.sleep(0.3)
+                return
+
         boss_target = self._find_boss_in_current_map(my_char)
-        if boss_target is None or getattr(boss_target, "is_dead", False):
+        now = time.time()
+
+        # 2. Kiểm tra nếu Boss đã chết hoặc biến mất
+        is_dead = False
+        if boss_target is None:
+            if self.boss_entry_time > 0 and (now - self.boss_entry_time) > 2.5:
+                is_dead = True
+        elif getattr(boss_target, "is_dead", False) or getattr(boss_target, "isDie", False) or getattr(boss_target, "cHP", 1) <= 0:
+            is_dead = True
+
+        if is_dead:
             self.current_boss.is_died = True
+            self.boss_kill_count += 1
+            b_map_name = self.current_boss.map_name or get_map_name(curr_map_id)
+            self.boss_kill_history.append({
+                "name": self.current_boss.name,
+                "map_name": b_map_name,
+                "time": time.strftime("%H:%M:%S"),
+            })
+            if len(self.boss_kill_history) > 30:
+                self.boss_kill_history = self.boss_kill_history[-30:]
+
+            # Thông báo cho toàn đội biết Boss đã chết
+            SharedHuntCoordinator.report_boss_died(self, self.current_boss.name, curr_map_id, curr_zone_id)
+
             if self.auto_loot_boss:
-                self._log_auto(f"Boss '{self.current_boss.name}' đã bị tiêu diệt! Nhặt đồ rơi...", is_important=True)
+                self._log_auto(f"[=] Boss '{self.current_boss.name}' đã bị tiêu diệt! Chờ 2s rồi nhặt đồ rơi...", is_important=True)
                 self.bh_state = self.STATE_BH_LOOTING
-                self.looting_start_time = time.time()
+                self.boss_death_time = now
+                self.looting_start_time = now
+                self.pick_item_attempts = 0
+                self.last_pick_item_time = 0.0
             else:
                 self.current_boss = None
+                self._reset_boss_fight_tracking()
                 self.bh_state = self.STATE_BH_IDLE
             return
+
+        # 3. Theo dõi biến động HP & phát hiện Boss ảo / Boss kẹt (C# AutoFarmBossNappa)
+        if self.boss_entry_time == 0.0:
+            self.boss_entry_time = now
+            self.last_boss_hp = getattr(boss_target, "cHP", -1)
+            self.last_boss_hp_check_time = now
+            self.boss_damaged = False
+            self.consecutive_no_damage_count = 0
+
+        current_hp = getattr(boss_target, "cHP", 0)
+        if (now - self.last_boss_hp_check_time) >= self.HP_CHECK_INTERVAL_S:
+            self.last_boss_hp_check_time = now
+            if self.last_boss_hp != -1:
+                if current_hp < self.last_boss_hp:
+                    self.boss_damaged = True
+                    self.consecutive_no_damage_count = 0
+                    self.last_boss_hp = current_hp
+                    self.bh_status_message = f"Đang pem Boss '{self.current_boss.name}' (HP: {format_big_number(current_hp)})"
+                elif current_hp == self.last_boss_hp:
+                    self.consecutive_no_damage_count += 1
+                    self.bh_status_message = f"Pem Boss '{self.current_boss.name}' - HP không đổi lần {self.consecutive_no_damage_count} (HP: {format_big_number(current_hp)})"
+
+                    # Kiểm tra Boss ảo: chưa từng mất máu sau 10s hoặc 5 lần kiểm tra
+                    if not self.boss_damaged and ((now - self.boss_entry_time) >= self.BOSS_NO_DAMAGE_TIMEOUT_S or self.consecutive_no_damage_count >= self.MAX_CONSECUTIVE_NO_DAMAGE):
+                        self._log_auto(f"[!] Boss '{self.current_boss.name}' là Boss ảo hoặc không thể đánh (10s không giảm HP). Bỏ qua khu {curr_zone_id}!", is_alert=True)
+                        SharedHuntCoordinator.release_zone(self._tag(), curr_map_id, curr_zone_id, scanned=True)
+                        self.scanned_zones.add(curr_zone_id)
+                        self._reset_boss_fight_tracking()
+                        self.bh_state = self.STATE_BH_SCANNING
+                        return
+
+                    # Kiểm tra Boss kẹt: đang đánh mà kẹt máu 3 lần kiểm tra liên tiếp
+                    if self.boss_damaged and self.consecutive_no_damage_count >= self.MAX_CONSECUTIVE_NO_DAMAGE_IN_FIGHT:
+                        self._log_auto(f"[!] Boss '{self.current_boss.name}' bị kẹt / bất tử trong khi đánh. Bỏ qua khu {curr_zone_id}!", is_alert=True)
+                        SharedHuntCoordinator.release_zone(self._tag(), curr_map_id, curr_zone_id, scanned=True)
+                        self.scanned_zones.add(curr_zone_id)
+                        self._reset_boss_fight_tracking()
+                        self.bh_state = self.STATE_BH_SCANNING
+                        return
+                else:
+                    self.last_boss_hp = current_hp
+                    self.consecutive_no_damage_count = 0
+            else:
+                self.last_boss_hp = current_hp
 
         target_x = getattr(boss_target, "cx", getattr(boss_target, "x", my_char.cx))
         target_y = getattr(boss_target, "cy", getattr(boss_target, "y", my_char.cy))
         self.last_boss_pos = (target_x, target_y)
 
-        # Teleport áp sát
+        # 4. Teleport áp sát
         if my_char.distance_to(target_x, target_y) > 40:
             self.teleport(target_x, target_y)
 
-        # Focus & Tấn công bằng xoay skill
-        now = time.time()
+        # 5. Focus & Tấn công liên tục bằng combo 3 skill xoay vòng
         if (now - self.last_attack_time) >= 0.12:
             self.last_attack_time = now
             if isinstance(boss_target, Mob):
@@ -1375,24 +1761,159 @@ class AutoManager:
             self.attack_target(boss_target)
 
     def _handle_bh_looting(self, my_char: Char) -> None:
-        elapsed = time.time() - self.looting_start_time
+        """Nhặt vật phẩm rơi từ Boss theo cơ chế Mod C# (chờ 2s, lọc đồ, retry 5 lần)."""
+        now = time.time()
+        elapsed = now - self.boss_death_time
+
+        # Duy trì vị trí boss chết
         if self.last_boss_pos:
             bx, by = self.last_boss_pos
-            self.teleport(bx, by)
+            if my_char.distance_to(bx, by) > 50:
+                self.teleport(bx, by)
 
-        items = list(my_char.mapInfo.items.values())
-        if elapsed < 0.5 or (items and elapsed < 2.5):
-            if items:
-                items.sort(key=lambda it: my_char.distance_to(it.x, it.y))
-                for it in items:
-                    self.teleport(it.x, it.y)
-                    svc = self._service()
-                    if svc:
-                        svc.pickItem(it.itemMapID)
-                    time.sleep(0.12)
-        else:
+        # 1. Chờ 2 giây sau khi boss chết để server drop đồ xuống mặt đất
+        if elapsed < self.WAIT_AFTER_BOSS_DEATH_S:
+            remaining_ms = int((self.WAIT_AFTER_BOSS_DEATH_S - elapsed) * 1000)
+            self.bh_status_message = f"Chờ server drop vật phẩm ({remaining_ms}ms)..."
+            return
+
+        # 2. Lấy danh sách item dưới đất
+        all_items = list(my_char.mapInfo.items.values())
+        if not all_items:
+            if elapsed >= 3.5 or self.pick_item_attempts > 0:
+                self._log_auto(f"[=] Kết thúc nhặt đồ Boss. Tổng chiến lợi phẩm: {self.boss_looted_items_count} món.", is_important=True)
+                self.current_boss = None
+                self._reset_boss_fight_tracking()
+                self.bh_state = self.STATE_BH_IDLE
+            return
+
+        # Lọc vật phẩm giá trị từ Boss
+        eligible_items = []
+        for it in all_items:
+            if it.itemMapID in self.blocked_items:
+                continue
+            # Đồ của mình
+            if getattr(it, "playerId", -1) == my_char.charID:
+                eligible_items.append(it)
+            # Găng thiên sứ (1070) và mảnh thiên sứ/thần linh (1066 - 1073)
+            elif it.template_id == self.GANG_THIEN_SU_ITEM_ID or (1066 <= it.template_id <= 1073):
+                eligible_items.append(it)
+            # Ngọc (77, 861, 862), Ngọc Rồng (14 - 20), Sao pha lê (441 - 447), Vàng (188 - 190)
+            elif it.template_id in (77, 861, 862) or (14 <= it.template_id <= 20) or (441 <= it.template_id <= 447) or (188 <= it.template_id <= 190):
+                eligible_items.append(it)
+            # Đồ rơi tự do không chủ sở hữu
+            elif getattr(it, "playerId", -1) in (-1, 0) and not self.pick_gem_only:
+                eligible_items.append(it)
+
+        if not eligible_items:
+            if elapsed >= 3.5 or self.pick_item_attempts > 0:
+                self._log_auto("[=] Không còn vật phẩm giá trị từ Boss trong khu.", is_important=True)
+                self.current_boss = None
+                self._reset_boss_fight_tracking()
+                self.bh_state = self.STATE_BH_IDLE
+            return
+
+        # 3. Giãn cách nhặt: 800ms
+        if (now - self.last_pick_item_time) < self.PICK_ITEM_DELAY_S:
+            self.bh_status_message = f"Đang nhặt đồ Boss ({self.pick_item_attempts}/{self.MAX_PICK_ATTEMPTS})..."
+            return
+
+        # 4. Chọn item gần nhất và teleport tới nhặt
+        target_item = min(eligible_items, key=lambda it: my_char.distance_to(it.x, it.y))
+        self.teleport(target_item.x, target_item.y)
+
+        svc = self._service()
+        if svc:
+            svc.pickItem(target_item.itemMapID)
+
+        self.last_pick_item_time = now
+        self.pick_item_attempts += 1
+        self.boss_looted_items_count += 1
+
+        it_name = get_item_name(target_item.template_id) or f"Item #{target_item.template_id}"
+        b_name = self.current_boss.name if self.current_boss else "Boss"
+        m_name = self.current_boss.map_name if self.current_boss else get_map_name(getattr(my_char.mapInfo, "mapID", -1))
+
+        self.boss_looted_items_history.append({
+            "item_name": it_name,
+            "template_id": target_item.template_id,
+            "boss_name": b_name,
+            "map_name": m_name,
+            "time": time.strftime("%H:%M:%S"),
+        })
+        if len(self.boss_looted_items_history) > 30:
+            self.boss_looted_items_history = self.boss_looted_items_history[-30:]
+
+        self._log_auto(f"[+] Đã nhặt: {it_name} rơi từ Boss '{b_name}' (lần {self.pick_item_attempts}/{self.MAX_PICK_ATTEMPTS})!", is_important=True)
+
+        if self.pick_item_attempts >= self.MAX_PICK_ATTEMPTS:
+            self._log_auto(f"[=] Đã nhặt đủ {self.MAX_PICK_ATTEMPTS} lần quy định, hoàn tất nhặt đồ!", is_important=True)
             self.current_boss = None
+            self._reset_boss_fight_tracking()
             self.bh_state = self.STATE_BH_IDLE
+
+    def notify_boss_spotted(self, boss: Boss, map_id: int, zone_id: int, pos: Tuple[int, int], reporter_tag: str = "") -> None:
+        """Được gọi bởi SharedHuntCoordinator khi 1 acc đồng đội phát hiện boss."""
+        if not self.is_boss_hunter_enabled:
+            return
+        if not self.is_target_boss(boss) and self.current_boss and self.current_boss.name != boss.name:
+            return
+
+        my_char = self._get_my_char()
+        curr_map = getattr(my_char.mapInfo, "mapID", -1) if my_char and my_char.mapInfo else -1
+
+        self.current_boss = boss
+        self.current_boss.map_id = map_id
+        self.current_boss.zone_id = zone_id
+        self.last_boss_pos = pos
+
+        tag_str = f"[{reporter_tag}] " if reporter_tag else ""
+        if curr_map == map_id:
+            curr_zone = getattr(my_char.mapInfo, "zoneID", -1) if my_char and my_char.mapInfo else -1
+            if curr_zone != zone_id:
+                self._log_auto(f"[~] Đồng đội {tag_str}phát hiện Boss '{boss.name}' ở Khu {zone_id}! Đang chuyển khu tới hỗ trợ pem...", is_important=True)
+                if self.client and hasattr(self.client, "change_zone"):
+                    self.client.change_zone(zone_id)
+            else:
+                self._log_auto(f"[~] Đã ở cùng Khu {zone_id} với Boss '{boss.name}'! Tập hợp pem Boss!", is_important=True)
+            self._reset_boss_fight_tracking()
+            self.bh_state = self.STATE_BH_COMBAT
+        else:
+            self._log_auto(f"[~] Đồng đội {tag_str}phát hiện Boss '{boss.name}' tại map {map_id} ({boss.map_name}) khu {zone_id}! Di chuyển tới chi viện!", is_important=True)
+            self.bh_state = self.STATE_BH_MOVING
+            if self.client and hasattr(self.client, "xmap"):
+                self.client.xmap(map_id)
+
+    def notify_boss_killed(self, boss_name: str, map_id: int, zone_id: int, reporter_tag: str = "") -> None:
+        """Được gọi bởi SharedHuntCoordinator khi Boss đã bị tiêu diệt."""
+        if not self.is_boss_hunter_enabled or not self.current_boss:
+            return
+        norm_curr = normalize_str(self.current_boss.name)
+        norm_target = normalize_str(boss_name)
+        if norm_curr == norm_target or norm_target in norm_curr or norm_curr in norm_target:
+            self.current_boss.is_died = True
+            self.boss_kill_count += 1
+            b_map_name = self.current_boss.map_name or get_map_name(map_id)
+            self.boss_kill_history.append({
+                "name": self.current_boss.name,
+                "map_name": b_map_name,
+                "time": time.strftime("%H:%M:%S"),
+            })
+            if len(self.boss_kill_history) > 30:
+                self.boss_kill_history = self.boss_kill_history[-30:]
+
+            if self.auto_loot_boss:
+                self._log_auto(f"[=] Boss '{self.current_boss.name}' đã bị hạ! Chờ 2s rồi nhặt đồ rơi...", is_important=True)
+                self.bh_state = self.STATE_BH_LOOTING
+                now = time.time()
+                self.boss_death_time = now
+                self.looting_start_time = now
+                self.pick_item_attempts = 0
+                self.last_pick_item_time = 0.0
+            else:
+                self.current_boss = None
+                self._reset_boss_fight_tracking()
+                self.bh_state = self.STATE_BH_IDLE
 
     # ==========================================================================
     # 6. NHIỆM VỤ BÒ MỘNG HẰNG NGÀY (AUTO QUEST BO MONG)
@@ -1639,6 +2160,16 @@ class AutoManager:
 
     def get_hunt_status(self) -> Dict[str, Any]:
         curr_patrol = self.patrol_maps[self.patrol_map_index] if self.patrol_maps and self.patrol_map_index < len(self.patrol_maps) else -1
+        my_char = self._get_my_char()
+        gender = getattr(my_char, "cgender", 0) if my_char else 0
+        try:
+            gender = int(gender)
+        except Exception:
+            gender = 0
+        current_combo = self.combat_combo_skills or list(self.TANSAT_SKILLS_BY_GENDER.get(gender, (0, 2, 4)))
+        curr_map = getattr(my_char.mapInfo, "mapID", -1) if my_char and my_char.mapInfo else -1
+        coop_scanners = SharedHuntCoordinator.get_active_scanners_count(curr_map)
+
         return {
             "is_enabled": self.is_boss_hunter_enabled,
             "state": self.bh_state,
@@ -1651,6 +2182,11 @@ class AutoManager:
             "auto_patrol": self.auto_patrol,
             "patrol_map_id": curr_patrol,
             "patrol_map_name": get_map_name(curr_patrol) if curr_patrol != -1 else "",
+            "boss_kill_count": self.boss_kill_count,
+            "boss_looted_items_count": self.boss_looted_items_count,
+            "boss_looted_items_history": list(self.boss_looted_items_history[-5:]),
+            "combo_skills": current_combo,
+            "cooperative_scanners": coop_scanners,
         }
 
     def get_quest_status(self) -> Dict[str, Any]:

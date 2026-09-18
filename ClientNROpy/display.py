@@ -16,6 +16,7 @@ from .pet import Pet
 from .magic_tree import MagicTree
 from .map_info import MapInfo
 from .client import ClientNRO
+from .game_data import format_big_number, get_item_name, SKILL_NAMES
 
 
 def print_banner():
@@ -58,7 +59,7 @@ def print_accounts_table(account_manager) -> None:
         # Đánh dấu trạng thái online / reconnecting
         if a.status == "RECONNECTING":
             rem = max(0, int(a.reconnect_timer_end - time.time()))
-            st_marker = f"[⟳] Nối({rem}s)" if rem > 0 else "[⟳] Nối lại"
+            st_marker = f"[~] Nối({rem}s)" if rem > 0 else "[~] Nối lại"
         elif not a.client or not a.client.isConnected():
             if a.status == "CONNECTING":
                 st_marker = "[*] Đang vào"
@@ -87,12 +88,14 @@ def print_character_overview(char: Char):
     print("\n" + "=" * 55)
     print(f"THÔNG TIN NHÂN VẬT: {char.cName} (ID: {char.charID})")
     print("=" * 55)
-    print(f"- Sức mạnh:      {char.cPower:,}")
-    print(f"- Tiềm năng:     {char.cTiemNang:,}")
+    print(f"- Sức mạnh:      {char.cPower:,} ({format_big_number(char.cPower)})")
+    print(f"- Tiềm năng:     {char.cTiemNang:,} ({format_big_number(char.cTiemNang)})")
     print(f"- HP:            {char.cHP:,} / {char.cHPFull:,}")
     print(f"- KI / MP:       {char.cMP:,} / {char.cMPFull:,}")
-    print(f"- Vàng (Xu):     {char.xu:,}")
-    print(f"- Ngọc (Lượng):  {char.luong:,} (Khóa: {char.luongKhoa:,})")
+    print(f"- Vàng (Xu):     {char.xu:,} ({format_big_number(char.xu)} Xu)")
+    ngoc_str = f" ({format_big_number(char.luong)} Ngọc)" if char.luong >= 1000 else ""
+    khoa_str = f" ({format_big_number(char.luongKhoa)} Khóa)" if char.luongKhoa >= 1000 else ""
+    print(f"- Ngọc:          {char.luong:,}{ngoc_str} | Hồng ngọc: {char.luongKhoa:,}{khoa_str}")
     print(f"- Hệ phái/Lớp:   {char.nClass}")
     print(f"- Tọa độ:        ({char.cx}, {char.cy})")
 
@@ -106,8 +109,8 @@ def print_inventory(char: Char):
     for i, it in enumerate(char.arrItemBag):
         opts = " | ".join([opt.getText() for opt in it.options])
         opt_str = f" [{opts}]" if opts else ""
-        info_str = f" - {it.info}" if it.info else ""
-        print(f"  [{i+1:02d}] Item ID: {it.template_id:<5} x{it.quantity:<4}{opt_str}{info_str}")
+        it_name = get_item_name(it.template_id, it.info or "")
+        print(f"  [{i+1:02d}] {it_name} (ID: {it.template_id}) x{it.quantity:<4}{opt_str}")
 
     print("\n" + "-" * 55)
     print(f"2. RƯƠNG ĐỒ ({len(char.arrItemBox)} món)")
@@ -117,8 +120,8 @@ def print_inventory(char: Char):
     for i, it in enumerate(char.arrItemBox):
         opts = " | ".join([opt.getText() for opt in it.options])
         opt_str = f" [{opts}]" if opts else ""
-        info_str = f" - {it.info}" if it.info else ""
-        print(f"  [{i+1:02d}] Item ID: {it.template_id:<5} x{it.quantity:<4}{opt_str}{info_str}")
+        it_name = get_item_name(it.template_id, it.info or "")
+        print(f"  [{i+1:02d}] {it_name} (ID: {it.template_id}) x{it.quantity:<4}{opt_str}")
 
     print("\n" + "-" * 55)
     print(f"3. TRANG BỊ TRÊN NGƯỜI ({len(char.arrItemBody)} món)")
@@ -128,7 +131,8 @@ def print_inventory(char: Char):
     for i, it in enumerate(char.arrItemBody):
         opts = " | ".join([opt.getText() for opt in it.options])
         opt_str = f" [{opts}]" if opts else ""
-        print(f"  [{i+1:02d}] Item ID: {it.template_id:<5}{opt_str}")
+        it_name = get_item_name(it.template_id, it.info or "")
+        print(f"  [{i+1:02d}] {it_name} (ID: {it.template_id}){opt_str}")
 
 
 def print_pet_info(pet: Pet):
@@ -146,8 +150,8 @@ def print_pet_info(pet: Pet):
     print(f"- Sức đánh:      {pet.cDamFull:,}")
     print(f"- Giáp:          {pet.cDefull:,}")
     print(f"- Chí mạng:      {pet.cCriticalFull}%")
-    print(f"- Sức mạnh:      {pet.cPower:,}")
-    print(f"- Tiềm năng:     {pet.cTiemNang:,}")
+    print(f"- Sức mạnh:      {pet.cPower:,} ({format_big_number(pet.cPower)})")
+    print(f"- Tiềm năng:     {pet.cTiemNang:,} ({format_big_number(pet.cTiemNang)})")
     print(f"- Thể lực:       {pet.cStamina} / {pet.cMaxStamina}")
     print(f"- Kỹ năng đệ:    {pet.arrPetSkill}")
     print(f"- Trang bị đệ:   {len(pet.arrItemBody)} món")
@@ -256,6 +260,20 @@ def print_hunt_status(client: ClientNRO):
     print(f"- Chế độ săn:            {'Săn TẤT CẢ các Boss' if st['hunt_all'] else 'Chỉ săn Boss theo Whitelist'}")
     targets_str = ", ".join(st['target_bosses']) if st['target_bosses'] else "(Trống - Săn tất cả)"
     print(f"- Danh sách Whitelist:   {targets_str}")
+    combo_sids = st.get('combo_skills', [])
+    combo_str = " -> ".join([f"{s} ({SKILL_NAMES.get(s, 'Chiêu')})" for s in combo_sids]) if combo_sids else "Mặc định theo hành tinh"
+    print(f"- Combo 3 Skill Pem:     {combo_str}")
+    coop_scanners = st.get('cooperative_scanners', 0)
+    print(f"- Phối hợp đa tài khoản: {coop_scanners} acc đang cùng chia việc quét map")
+    print(f"- Boss đã tiêu diệt:     {st.get('boss_kill_count', 0)} Boss")
+    print(f"- Đồ đã nhặt từ Boss:    {st.get('boss_looted_items_count', 0)} vật phẩm")
+    looted_hist = st.get('boss_looted_items_history', [])
+    if looted_hist:
+        print("-" * 65)
+        print("  [CHIẾN LỢI PHẨM NHẶT TỪ BOSS GẦN ĐÂY]")
+        for item in looted_hist[-5:]:
+            print(f"  [+] {item.get('time', '')}: {item.get('item_name', '')} (Boss: {item.get('boss_name', '')} | {item.get('map_name', '')})")
+    print("-" * 65)
     print(f"- Tự nhặt đồ khi xong:   {'BẬT' if st['auto_loot'] else 'TẮT'}")
     print(f"- Tự hồi sinh:           {'BẬT' if st['auto_revive'] else 'TẮT'}")
     print(f"- Tự động tuần tra:      {'BẬT' if st.get('auto_patrol', True) else 'TẮT'}")
@@ -293,50 +311,50 @@ def print_shuttle_status(client: ClientNRO):
 
 
 def print_cli_help():
-    print("\n" + "=" * 70)
-    print("             HƯỚNG DẪN DÒNG LỆNH (CLI) - CLIENT NRO PY           ")
-    print("=" * 70)
+    print("\n" + "=" * 76)
+    print("             HƯỚNG DẪN DÒNG LỆNH (CLI) - CLIENT NRO PY              ")
+    print("=" * 76)
     print("  [ĐIỀU KHIỂN ĐA TÀI KHOẢN (MULTI-ACCOUNT)]")
-    print("  status / acc list           : Xem bảng tổng hợp trạng thái các tài khoản")
+    print("  status / stt / ls           : Xem bảng tổng hợp trạng thái các tài khoản")
     print("  use <id|all>                : Chuyển ngữ cảnh sang tài khoản chỉ định hoặc tất cả")
     print("  all <lệnh>                  : Thực thi lệnh trên TOÀN BỘ tài khoản (vd: all hunt on)")
     print("  acc <id> <lệnh>             : Thực thi lệnh trên 1 tài khoản (vd: acc 1 xmap 0)")
-    print("  acc start <id|all>          : Khởi động tài khoản kết nối game")
-    print("  acc stop <id|all>           : Dừng/đăng xuất tài khoản")
-    print("-" * 70)
-    print("  [QUẢN LÝ HIỂN THỊ & LỌC LOG CONSOLE]")
-    print("  log off / mute              : TẮT toàn bộ log trôi nền (giữ console sạch sẽ để gõ lệnh)")
-    print("  log on                      : BẬT lại log nền")
-    print("  log chat [on|off]           : Bật / Tắt hiển thị tin nhắn chat map (Mặc định: TẮT)")
-    print("  log boss [on|off]           : Bật / Tắt thông báo Boss xuất hiện")
-    print("  cls / clear                 : Xóa sạch màn hình console")
-    print("-" * 70)
+    print("  login / connect [id|all]    : Đăng nhập kết nối tài khoản vào game")
+    print("  logout / dis [id|all]       : Đăng xuất an toàn (dừng auto-reconnect)")
+    print("-" * 76)
+    print("  [TRA CỨU VẬT PHẨM & TÀI SẢN]")
+    print("  item <id|tên> [all]         : Kiểm tra vật phẩm trong balo (vd: item 14, item đậu)")
+    print("  info / thongtin             : Xem chi tiết toàn diện thông tin bản thân & đệ tử")
+    print("  bag / box                   : Xem toàn bộ vật phẩm trong Balo / Rương đồ")
+    print("  harvest / dau               : Thu hoạch đậu thần từ Cây Đậu Thần")
+    print("-" * 76)
     print("  [AUTO SĂN BOSS & CHIẾN ĐẤU]")
-    print("  hunt auto / hunt on         : Bắt đầu Auto Săn Boss & Tuần Tra")
-    print("  hunt off / stop             : Dừng Auto Săn Boss")
-    print("  hunt status                 : Xem trạng thái, mục tiêu săn Boss")
+    print("  hunt on / off / status      : Bật / Tắt / Xem tiến độ Auto Săn Boss & Tuần Tra")
+    print("  boss / boss alive / boss go : Xem Boss đang xuất hiện / Bay tới vị trí Boss")
     print("  ak [on|off]                 : Tự động đánh mục tiêu focus")
-    print("  ts / tansat [on|off|mob|pk] : Bật/Tắt tàn sát quái hoặc người chơi")
+    print("  ts / tansat [on|off|mob|pk] : Bật / Tắt tàn sát quái hoặc người chơi (Auto PK)")
     print("  anhat                       : Bật / Tắt tự động nhặt đồ")
+    print("  cnn                         : Chỉ nhặt ngọc")
+    print("  nsq                         : Né siêu quái")
+    print("  abf [hp%]                   : Tự dùng đậu khi HP/KI xuống dưới ngưỡng (vd: abf 50)")
     print("  autohs [on|off|ngoc|ve]     : Bật / Tắt tự hồi sinh (Mặc định: BẬT bằng ngọc)")
+    print("-" * 76)
+    print("  [ĐỆ TỬ & LUYỆN TẬP TỰ ĐỘNG]")
+    print("  pet <0-5|action>            : Đổi trạng thái đệ: follow, protect, attack, home, fuse, porata")
     print("  trainpet [normal|avoid|off] : Auto Úp đệ tử thông minh (Normal, Né siêu quái, Kaioken)")
     print("  trainacc [on|off]           : Auto làm chuỗi nhiệm vụ tân thủ sơ sinh (NV 0 -> 11)")
-    print("-" * 70)
-    print("  [TỰ ĐỘNG KẾT NỐI LẠI (AUTO-RECONNECT)]")
-    print("  reconnect [on|off]          : Bật / Tắt tự động kết nối lại khi mất mạng (Mặc định: BẬT)")
-    print("  reconnect delay <giây>      : Cấu hình thời gian chờ trước khi kết nối lại (Mặc định: 10s)")
-    print("  reconnect now               : Kết nối lại ngay lập tức")
-    print("-" * 70)
-    print("  [TELEGRAM BOT & TRỢ LÝ AI]")
-    print("  telegram / tg               : Xem trạng thái kết nối Telegram Bot (@nroPy_Bot)")
-    print("  telegram send <nội dung>    : Phát sóng thông báo ra toàn bộ người dùng Telegram")
-    print("-" * 70)
-    print("  [TÌM ĐƯỜNG XMAP & DI CHUYỂN]")
+    print("-" * 76)
+    print("  [TÌM ĐƯỜNG XMAP & KHU VỰC]")
     print("  xmap <id|tên>               : Tự động di chuyển tới bản đồ chỉ định")
     print("  xmap stop                   : Dừng di chuyển Xmap")
-    print("  goto <map> [min|khu] [ts|ak|hunt] : Macro: xmap -> đổi khu -> bật auto")
-    print("  zone [id]                   : Xem danh sách khu hoặc đổi khu (vd: zone 5)")
-    print("  nvbm [on|off|status]        : Bật / Tắt / Xem Auto Nhiệm vụ Bò Mộng")
-    print("  info / map                  : Xem thông tin nhân vật / bản đồ hiện tại")
+    print("  goto <map> [min|khu] [ts|..]: Macro: xmap -> đổi khu -> bật auto (vd: goto 112 min ts)")
+    print("  zone [khu|min]              : Xem danh sách khu hoặc đổi khu (vd: zone min là khu vắng nhất)")
+    print("  map                         : Xem chi tiết bản đồ, quái, NPC và người trong khu")
+    print("-" * 76)
+    print("  [TỰ ĐỘNG KẾT NỐI & HỆ THỐNG]")
+    print("  reconnect [on|off|delay|now]: Cấu hình và kết nối lại ngay lập tức")
+    print("  log off / mute / log on     : Tắt / Bật log nền trôi trên console để gõ lệnh yên tĩnh")
+    print("  cls / clear                 : Xóa sạch màn hình console")
+    print("  telegram / tg               : Xem trạng thái kết nối Telegram Bot")
     print("  exit / quit                 : Đăng xuất và thoát chương trình")
-    print("=" * 70 + "\n")
+    print("=" * 76 + "\n")

@@ -269,7 +269,7 @@ def main():
 
     log("\n" + "=" * 70)
     log_success("HOÀN TẤT! BẠN CHỈ CẦN COPY DUY NHẤT 1 FILE SAU LÊN VPS ĐỂ CHẠY:")
-    log(f"   👉  {target_exe}")
+    log(f"   =>  {target_exe}")
     log("=" * 70 + "\n")
 
 

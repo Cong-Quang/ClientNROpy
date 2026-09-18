@@ -81,6 +81,31 @@ from .xmap import (
     resolve_map_id,
 )
 
+# 7. Cơ sở dữ liệu trò chơi tập trung (Game Data)
+from . import game_data
+from .game_data import (
+    ITEM_NAMES,
+    ITEM_TEMPLATES,
+    MOB_NAMES,
+    MOB_TEMPLATES,
+    NPC_NAMES,
+    NPC_TEMPLATES,
+    SKILL_NAMES,
+    SKILL_TEMPLATES,
+    get_item_name,
+    get_item_info,
+    get_mob_name,
+    get_mob_info,
+    get_npc_name,
+    get_npc_info,
+    get_skill_name,
+    get_skill_info,
+    search_items,
+    search_maps,
+    search_mobs,
+    search_npcs,
+)
+
 __all__ = [
     "myReader",
     "myWriter",
@@ -128,5 +153,26 @@ __all__ = [
     "MAP_NAMES",
     "get_map_name",
     "resolve_map_id",
+    "game_data",
+    "ITEM_NAMES",
+    "ITEM_TEMPLATES",
+    "MOB_NAMES",
+    "MOB_TEMPLATES",
+    "NPC_NAMES",
+    "NPC_TEMPLATES",
+    "SKILL_NAMES",
+    "SKILL_TEMPLATES",
+    "get_item_name",
+    "get_item_info",
+    "get_mob_name",
+    "get_mob_info",
+    "get_npc_name",
+    "get_npc_info",
+    "get_skill_name",
+    "get_skill_info",
+    "search_items",
+    "search_maps",
+    "search_mobs",
+    "search_npcs",
 ]
 

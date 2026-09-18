@@ -515,7 +515,11 @@ class ClientNRO:
 
     def get_hunt_status(self) -> Dict[str, Any]:
         """Lấy toàn bộ trạng thái máy trạng thái săn Boss."""
-        return self.boss_hunter.get_status()
+        return self.auto.get_hunt_status()
+
+    def set_combo_skills(self, skill_ids: List[int]) -> Tuple[bool, str]:
+        """Cài đặt bộ 3 skill xoay vòng để pem boss / tàn sát."""
+        return self.auto.set_combo_skills(skill_ids)
 
     # --------------------------------------------------------------------------
     # AUTO NHIỆM VỤ BÒ MỘNG HẰNG NGÀY (AUTO QUEST)

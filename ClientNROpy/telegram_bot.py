@@ -29,125 +29,26 @@ from typing import Optional, List, Dict, Any, Set, Union
 from .logger import logger
 from .char import Char
 from .item import Item
-
-
-# ==============================================================================
-# BẢNG TRA CỨU TÊN VẬT PHẨM, KỸ NĂNG VÀ TRANG BỊ CHUẨN NRO
-# ==============================================================================
-COMMON_ITEM_NAMES: Dict[int, str] = {
-    0: "Áo Vải Thô (Trái Đất)",
-    1: "Quần Vải Thô (Trái Đất)",
-    2: "Giày Vải Thô (Trái Đất)",
-    3: "Áo Sợi Len (Namếc)",
-    4: "Quần Sợi Len (Namếc)",
-    5: "Giày Sợi Len (Namếc)",
-    6: "Áo Giáp Sắt (Xayda)",
-    7: "Quần Giáp Sắt (Xayda)",
-    8: "Giày Giáp Sắt (Xayda)",
-    12: "Rada Cấp 1",
-    13: "Đậu thần Cấp 1",
-    14: "Đậu thần Cấp 2",
-    15: "Đậu thần Cấp 3",
-    16: "Đậu thần Cấp 4",
-    17: "Đậu thần Cấp 5",
-    18: "Đậu thần Cấp 6",
-    19: "Đậu thần Cấp 7",
-    20: "Đậu thần Cấp 8",
-    60: "Đậu thần Cấp 9",
-    61: "Đậu thần Cấp 10",
-    77: "Cờ Caro",
-    193: "Capsule Bay Thường",
-    194: "Capsule Đặc Biệt (VIP)",
-    211: "Nho Tím",
-    212: "Nho Xanh",
-    380: "Bổ Huyết",
-    381: "Bổ Khí",
-    382: "Giáp Xên",
-    383: "Cuồng Nộ",
-    384: "Ẩn Danh",
-    385: "Bổ Huyết 2",
-    441: "Ngọc Rồng 1 Sao",
-    442: "Ngọc Rồng 2 Sao",
-    443: "Ngọc Rồng 3 Sao",
-    444: "Ngọc Rồng 4 Sao",
-    445: "Ngọc Rồng 5 Sao",
-    446: "Ngọc Rồng 6 Sao",
-    447: "Ngọc Rồng 7 Sao",
-    457: "Thỏi Vàng (500Tr Vàng)",
-    521: "Bình Nước Phép",
-    534: "Nước Mía",
-    535: "Trà Đào",
-    536: "Bánh Bao",
-    568: "Hộp Quà May Mắn",
-    569: "Kẹo Giáng Sinh",
-    921: "Bông Tai Porata Cấp 2",
-    922: "Mảnh Vỡ Bông Tai",
-    1152: "Đá Nâng Cấp",
-    1153: "Đá May Mắn",
-}
-
-SKILL_NAMES: Dict[int, str] = {
-    0: "Đấm Dragon (Trái Đất)",
-    1: "Kamejoko",
-    6: "Thái Dương Hạ San",
-    9: "Quả Cầu Kênh Khi",
-    10: "Dịch Chuyển Tức Thời",
-    19: "Thôi Miên",
-    20: "Tự Phát Nổ",
-    22: "Khiên Năng Lượng (TĐ)",
-    2: "Đấm Demon (Namếc)",
-    3: "Masenko",
-    7: "Trị Thương",
-    8: "Tái Tạo Năng Lượng",
-    11: "Biến Sôcôla",
-    12: "Đẻ Trứng",
-    14: "Laser",
-    4: "Đấm Galic (Xayda)",
-    5: "Antomic",
-    13: "Biến Khỉ (Hóa Khỉ)",
-    17: "Trói Tự Động",
-    18: "Huýt Sáo",
-    21: "Khiên Năng Lượng (XD)",
-}
-
-BODY_SLOT_NAMES: Dict[int, str] = {
-    0: "Áo",
-    1: "Quần",
-    2: "Găng tay",
-    3: "Giày",
-    4: "Rada",
-    5: "Cải trang",
-    6: "Giáp luyện tập",
-    7: "Phụ kiện",
-    8: "Linh thú",
-    9: "Bông tai Porata",
-    10: "Chân mệnh",
-}
-
-
-def format_big_number(val: int) -> str:
-    """Định dạng số lớn theo phong cách người chơi NRO (Tỷ, Triệu, k)."""
-    if val >= 1_000_000_000:
-        return f"{val / 1_000_000_000:.1f} Tỷ"
-    if val >= 1_000_000:
-        return f"{val / 1_000_000:.1f} Tr"
-    if val >= 1_000:
-        return f"{val / 1_000:.1f}k"
-    return str(val)
-
-
-def get_item_display_name(template_id: int, fallback_info: str = "") -> str:
-    """Lấy tên hiển thị trực quan của vật phẩm."""
-    if template_id in COMMON_ITEM_NAMES:
-        return COMMON_ITEM_NAMES[template_id]
-    if fallback_info and fallback_info.strip():
-        return fallback_info.strip()
-    return f"Vật phẩm #{template_id}"
-
-
-def get_skill_display_name(skill_id: int) -> str:
-    """Lấy tên kỹ năng hiển thị."""
-    return SKILL_NAMES.get(skill_id, f"Chiêu #{skill_id}")
+from .game_data import (
+    COMMON_ITEM_NAMES,
+    ITEM_NAMES,
+    SKILL_NAMES,
+    BODY_SLOT_NAMES,
+    ITEM_TYPE_NAMES,
+    GENDER_NAMES,
+    format_big_number,
+    get_item_display_name,
+    get_skill_display_name,
+    get_item_name,
+    get_item_info,
+    get_item_type_name,
+    get_gender_name,
+    format_item_details,
+    get_map_name,
+    get_mob_name,
+    get_npc_name,
+    search_items,
+)
 
 
 class TelegramAIBot:
@@ -237,20 +138,28 @@ class TelegramAIBot:
             if row:
                 keyboard.append(row)
 
-        # Hàng lệnh tra cứu
+        # Hàng 3: Tra cứu & Bản đồ
         keyboard.append([
             {"text": "/status"},
-            {"text": "/goto"},
             {"text": "/info"},
-            {"text": "/help"},
+            {"text": "/map"},
+            {"text": "/zone"},
         ])
 
-        # Hàng lệnh train cơ bản (tự áp dụng vào acc đang chọn)
+        # Hàng 4: Di chuyển & Train cơ bản
         keyboard.append([
+            {"text": "/goto"},
             {"text": "/ts on"},
             {"text": "/ts off"},
-            {"text": "/zone min"},
             {"text": "/harvest"},
+        ])
+
+        # Hàng 5: Săn Boss & Đăng nhập tài khoản
+        keyboard.append([
+            {"text": "/hunt on"},
+            {"text": "/hunt off"},
+            {"text": "/login"},
+            {"text": "/logout"},
         ])
 
         return {
@@ -391,18 +300,19 @@ class TelegramAIBot:
             f"> Tên nhân vật:    *{char.cName}* (ID: `{char.charID}`)",
             f"> Hành tinh:       *{gender_str}* | Lớp: `{class_str}`",
             f"> Trạng thái:      *{alive_str}* | Kết nối: *{inst.status}*",
-            f"> HP (Máu):        *{char.cHP:,} / {char.cHPFull:,}* ({hp_pct}%)",
-            f"> KI / MP (Nội lực): *{char.cMP:,} / {char.cMPFull:,}* ({mp_pct}%)",
-            f"> Sức mạnh:        *{char.cPower:,}* ({format_big_number(char.cPower)})",
-            f"> Tiềm năng:       *{char.cTiemNang:,}* ({format_big_number(char.cTiemNang)})",
-            f"> Sức đánh (Dam):  *{char.cDamFull:,}* (Gốc: `{char.cDamGoc:,}`)",
-            f"> Giáp (Def):      *{char.cDefull:,}* (Gốc: `{char.cDefGoc:,}`)",
-            f"> Chí mạng (Crit): *{char.cCriticalFull}%* (Gốc: `{char.cCriticalGoc}%`)",
-            f"> Tốc độ chạy:     *{char.cspeed}*",
-            f"> Tài sản tiền tệ:",
-            f"  ↳ = Vàng (Xu): *{char.xu:,}* ({format_big_number(char.xu)} Xu)",
-            f"  ↳ = Ngọc xanh: *{char.luong:,}* Lượng",
-            f"  ↳ = Ngọc hồng: *{char.luongKhoa:,}* Lượng khóa",
+            f"> = *TÀI SẢN TIỀN TỆ:*",
+            f"  > Vàng (Xu):       *{char.xu:,}* ({format_big_number(char.xu)} Xu)",
+            f"  > Ngọc xanh:       *{char.luong:,}* ({format_big_number(char.luong)} Ngọc)" if char.luong >= 1000 else f"  > Ngọc xanh:       *{char.luong:,}* Ngọc",
+            f"  > Hồng ngọc:       *{char.luongKhoa:,}* ({format_big_number(char.luongKhoa)} Ngọc)" if char.luongKhoa >= 1000 else f"  > Hồng ngọc:       *{char.luongKhoa:,}* Ngọc khóa",
+            f"> = *CHỈ SỐ CHIẾN ĐẤU:*",
+            f"  > HP (Máu):        *{char.cHP:,} / {char.cHPFull:,}* ({hp_pct}%)",
+            f"  > KI / MP (Nội lực): *{char.cMP:,} / {char.cMPFull:,}* ({mp_pct}%)",
+            f"  > Sức mạnh:        *{char.cPower:,}* ({format_big_number(char.cPower)})",
+            f"  > Tiềm năng:       *{char.cTiemNang:,}* ({format_big_number(char.cTiemNang)})",
+            f"  > Sức đánh (Dam):  *{char.cDamFull:,}* (Gốc: `{char.cDamGoc:,}`)",
+            f"  > Giáp (Def):      *{char.cDefull:,}* (Gốc: `{char.cDefGoc:,}`)",
+            f"  > Chí mạng (Crit): *{char.cCriticalFull}%* (Gốc: `{char.cCriticalGoc}%`)",
+            f"  > Tốc độ chạy:     *{char.cspeed}*",
             f"> Nhiệm vụ:        *{task_str}*",
             f"> Chiêu thức ({len(char.skills)}): `{skills_str}`",
         ]
@@ -429,7 +339,7 @@ class TelegramAIBot:
             lines.append("> Hiện tại nhân vật chưa có đệ tử.")
 
         # 3. Bản đồ & Khu vực (Zone)
-        lines.append(f"\n= *3. BẢN ĐỒ & KHU VỰC (ZONE):*")
+        lines.append(f"\n= *3. BẢN ĐỒ & VỊ TRÍ:*")
         num_players = len(char.mapInfo.chars) if char.mapInfo and char.mapInfo.chars else 0
         zone_player_str = ""
         if char.mapInfo and char.mapInfo.zones:
@@ -446,57 +356,77 @@ class TelegramAIBot:
         else:
             lines.append(f"> Người trong khu: Không có người chơi khác.")
 
-        # 4. Cây đậu thần
-        lines.append(f"\n= *4. CÂY ĐẬU THẦN (MAGIC TREE):*")
+        # Cây đậu thần
         tree = char.magicTree
         if tree:
             sec_str = f"Chín sau {tree.seconds}s ({int(tree.seconds/60)} phút)" if tree.seconds > 0 else "Đậu đã chín đầy đủ!"
             pea_pct = round((tree.currPeas / max(1, tree.maxPeas)) * 100, 1)
-            lines.append(f"> Cây đậu Cấp {tree.level}: *{tree.currPeas} / {tree.maxPeas}* hạt ({pea_pct}%)")
-            lines.append(f"> Tình trạng:      *{sec_str}* (Gõ `/harvest` để thu hoạch)")
-        else:
-            lines.append("> Chưa có dữ liệu cây đậu.")
+            lines.append(f"> Cây đậu Cấp {tree.level}: *{tree.currPeas} / {tree.maxPeas}* hạt ({pea_pct}%) - {sec_str}")
 
-        # 5. Hành trang Balo
+        # 4. Hành trang & Rương đồ (Tóm tắt gọn gàng - KHÔNG in chi tiết từng món để tránh dài dòng)
         bag = char.arrItemBag
-        lines.append(f"\n= *5. HÀNH TRANG BALO ({len(bag)} món):*")
-        if not bag:
-            lines.append("> (Balo hiện đang trống)")
-        else:
-            show_count = min(12, len(bag))
-            for idx in range(show_count):
-                it = bag[idx]
-                it_name = get_item_display_name(it.template_id, it.info)
-                opts = " | ".join([opt.getText() for opt in it.options[:2]])
-                opt_str = f" [{opts}]" if opts else ""
-                lines.append(f"`{idx+1:02d}.` *{it_name}* x{it.quantity} (ID: `{it.template_id}`){opt_str}")
-            if len(bag) > show_count:
-                lines.append(f"... và *{len(bag) - show_count}* món khác. Gõ `/bag #{inst.config.acc_id}` để xem toàn bộ!")
-
-        # 6. Trang bị đang mặc (Body)
-        body = char.arrItemBody
-        lines.append(f"\n= *6. TRANG BỊ ĐANG MẶC ({len(body)} món):*")
-        if not body:
-            lines.append("> (Chưa mặc trang bị)")
-        else:
-            for idx, it in enumerate(body):
-                slot_title = BODY_SLOT_NAMES.get(idx, f"Món {idx+1}")
-                it_name = get_item_display_name(it.template_id, it.info)
-                opts = " | ".join([opt.getText() for opt in it.options[:3]])
-                opt_str = f"\n   ↳ _{opts}_" if opts else ""
-                lines.append(f"> [{slot_title}] *{it_name}* (ID: `{it.template_id}`){opt_str}")
-
-        # 7. Rương đồ tóm tắt
         box = char.arrItemBox
-        lines.append(f"\n= *7. RƯƠNG ĐỒ ({len(box)} món):*")
-        lines.append(f"> Đang chứa *{len(box)}* vật phẩm trong rương đồ. Gõ `/box #{inst.config.acc_id}` để xem chi tiết.")
+        lines.append(f"\n= *4. HÀNH TRANG & RƯƠNG ĐỒ:*")
+        lines.append(f"> Balo:    *{len(bag)}* món (Dùng `/item <id|tên>` để kiểm tra đồ hoặc `/bag` để xem)")
+        lines.append(f"> Rương:   *{len(box)}* món (Dùng `/box` để xem chi tiết)")
 
-        # 8. Cấu hình Auto & Hệ thống
-        lines.append(f"\n= *8. CẤU HÌNH AUTO & HỆ THỐNG:*")
-        cbm = client.combat_manager
+        # 5. Tiến độ Săn Boss (Hiển thị nổi bật nếu đang bật hunt hoặc đã diệt boss)
         bh = client.boss_hunter
+        is_hunting = getattr(bh, "is_hunting", False)
+        kills = getattr(bh, "boss_kill_count", 0)
+        loots = getattr(bh, "boss_looted_items_count", 0)
+
+        if is_hunting or kills > 0 or loots > 0:
+            lines.append(f"\n= *5. TIẾN ĐỘ SĂN BOSS:*")
+            state_names = {
+                "IDLE": "[=] Đang chờ thông báo Boss mới" if is_hunting else "[ ] Đã dừng săn",
+                "MOVING": "[>] Đang di chuyển tới map Boss",
+                "SEARCHING": "[>] Đang tìm kiếm & quét khu vực",
+                "COMBAT": "[>] Đang chiến đấu tiêu diệt Boss",
+                "LOOTING": "[>] Đang nhặt đồ rơi",
+            }
+            curr_state = getattr(bh, "bh_state", "IDLE")
+            state_desc = state_names.get(curr_state, curr_state)
+            lines.append(f"> Trạng thái săn:   *{state_desc}*")
+
+            # Mục tiêu hiện tại
+            curr_b = getattr(bh, "current_boss", None)
+            if curr_b:
+                b_map = curr_b.map_name or get_map_name(curr_b.map_id)
+                z_txt = f" (Khu {curr_b.zone_id:02d})" if getattr(curr_b, "zone_id", -1) >= 0 else " (Đang tìm khu)"
+                lines.append(f"> Mục tiêu hiện tại: *{curr_b.name}* tại *{b_map}*{z_txt}")
+            else:
+                lines.append(f"> Mục tiêu hiện tại: Chưa có (Đang quét khu hoặc chờ Boss)")
+
+            status_msg = getattr(bh, "bh_status_message", "") or "Đang hoạt động"
+            lines.append(f"> Đang làm gì:      _{status_msg}_")
+            lines.append(f"> Boss đã tiêu diệt: *{kills}* con")
+            lines.append(f"> Đồ farm được:     *{loots}* vật phẩm")
+
+            # Combo 3 Skill Pem
+            combo_sids = getattr(bh, "combat_combo_skills", None) or (getattr(bh, "_get_tansat_skill_ids", lambda: (0, 2, 4))() if hasattr(bh, "_get_tansat_skill_ids") else (0, 2, 4))
+            combo_names = [f"{s} ({get_skill_display_name(s)})" for s in combo_sids]
+            lines.append(f"> Combo Skill Pem:  *{' -> '.join(combo_names)}*")
+
+            # Lịch sử tiêu diệt gần nhất
+            b_history = getattr(bh, "boss_kill_history", [])
+            if b_history:
+                lines.append(f"> Boss hạ gần đây:")
+                for h in b_history[-3:]:
+                    lines.append(f"  • *{h['name']}* tại {h.get('map_name', '')} ({h.get('time', '')})")
+
+            # Chiến lợi phẩm nhặt từ Boss gần nhất
+            looted_items = getattr(bh, "boss_looted_items_history", [])
+            if looted_items:
+                lines.append(f"> Đồ nhặt từ Boss gần đây:")
+                for it in looted_items[-3:]:
+                    lines.append(f"  • {it.get('time', '')}: *{it.get('item_name', '')}* ({it.get('boss_name', '')})")
+
+        # 6. Cấu hình Auto & Hệ thống
+        lines.append(f"\n= *6. CẤU HÌNH AUTO & HỆ THỐNG:*")
+        cbm = client.combat_manager
         rec_str = f"BẬT ({int(self.account_manager.reconnect_delay)}s)" if (self.account_manager and self.account_manager.auto_reconnect) else "TẮT"
-        lines.append(f"> Auto Săn Boss:   {'[=] BẬT' if bh.is_hunting else '[ ] TẮT'}")
+        lines.append(f"> Săn Boss (Hunt): {'[=] BẬT' if is_hunting else '[ ] TẮT'}")
         lines.append(f"> Tự Đánh (AK):    {'[=] BẬT' if cbm.is_ak else '[ ] TẮT'}")
         lines.append(f"> Tàn Sát (TS):    {'[=] BẬT' if cbm.is_tansat else '[ ] TẮT'} (Chế độ: `{cbm.tansat_mode}`)")
         lines.append(f"> Tự Nhặt Đồ:      {'[=] BẬT' if cbm.auto_pick else '[ ] TẮT'}{' (Chỉ ngọc)' if cbm.pick_gem_only else ''}")
@@ -507,7 +437,7 @@ class TelegramAIBot:
         lines.append(f"> Auto-Reconnect:  *{rec_str}* | Proxy: *{inst.proxy_str}*")
 
         lines.append(f"=============================")
-        lines.append(f"> *Lệnh nhanh:* `/pet follow|attack|fuse` > `/harvest` > `/bag` > `/box` > `/map` > `/xmap 0`")
+        lines.append(f"> *Lệnh nhanh:* `/item 14` > `/map` > `/zone min` > `/hunt on` > `/ts on` > `/harvest`")
 
         return "\n".join(lines)
 
@@ -529,8 +459,8 @@ class TelegramAIBot:
         for i, it in enumerate(bag):
             it_name = get_item_display_name(it.template_id, it.info)
             opts = " | ".join([opt.getText() for opt in it.options])
-            opt_str = f"\n   ↳ *Chỉ số:* _{opts}_" if opts else ""
-            desc_str = f"\n   ↳ *Ghi chú:* {it.content}" if (it.content and it.content != it_name) else ""
+            opt_str = f"\n   | *Chỉ số:* _{opts}_" if opts else ""
+            desc_str = f"\n   | *Ghi chú:* {it.content}" if (it.content and it.content != it_name) else ""
             lines.append(f"`{i+1:02d}.` = *{it_name}* x{it.quantity} (ID: `{it.template_id}`){opt_str}{desc_str}")
         return "\n".join(lines)
 
@@ -552,8 +482,8 @@ class TelegramAIBot:
         for i, it in enumerate(box):
             it_name = get_item_display_name(it.template_id, it.info)
             opts = " | ".join([opt.getText() for opt in it.options])
-            opt_str = f"\n   ↳ *Chỉ số:* _{opts}_" if opts else ""
-            desc_str = f"\n   ↳ *Ghi chú:* {it.content}" if (it.content and it.content != it_name) else ""
+            opt_str = f"\n   | *Chỉ số:* _{opts}_" if opts else ""
+            desc_str = f"\n   | *Ghi chú:* {it.content}" if (it.content and it.content != it_name) else ""
             lines.append(f"`{i+1:02d}.` = *{it_name}* x{it.quantity} (ID: `{it.template_id}`){opt_str}{desc_str}")
         return "\n".join(lines)
 
@@ -902,20 +832,75 @@ class TelegramAIBot:
                 self.send_message(chat_id, f"[x] Không tìm thấy Acc #{acc_id}. Gõ `/status` để xem danh sách.")
                 return
             cname = inst.char_name if inst.char_name != "Chưa vào" else inst.config.username
-            online = "ONLINE" if (inst.client and inst.client.isConnected()) else "OFFLINE"
+            online = bool(inst.client and inst.client.isConnected())
             self.selected_targets[chat_id] = acc_id
-            self.send_message(
-                chat_id,
-                f"> Đã chọn tài khoản: *Acc #{acc_id} ({cname})* [{online}]\n"
-                f"Các lệnh (`/info`, `/goto`, `/ts`, `/zone`...) tiếp theo sẽ áp dụng riêng cho tài khoản này.",
-                reply_markup=self.get_main_keyboard(chat_id)
-            )
+
+            if not online:
+                card = (
+                    f"> *ĐÃ CHỌN TÀI KHOẢN: Acc #{acc_id} ({cname})* [OFFLINE]\n"
+                    f"=============================\n"
+                    f"[!] Tài khoản hiện đang ngắt kết nối.\n"
+                    f"> Gõ `/login` để kết nối vào game ngay!"
+                )
+            else:
+                char = inst.client.myChar if inst.client else None
+                if char:
+                    hp_pct = round((char.cHP / max(1, char.cHPFull)) * 100, 1)
+                    mp_pct = round((char.cMP / max(1, char.cMPFull)) * 100, 1)
+                    gender_str = GENDER_NAMES.get(char.cgender, "Chưa rõ")
+                    map_name = char.mapInfo.mapName if (char.mapInfo and char.mapInfo.mapName) else "Chưa rõ"
+                    zone_id = char.mapInfo.zoneID if char.mapInfo else -1
+
+                    cbm = inst.client.combat_manager
+                    bh = inst.client.boss_hunter
+                    auto_list = []
+                    if getattr(bh, "is_hunting", False):
+                        auto_list.append("Săn Boss")
+                    if cbm.is_ak:
+                        auto_list.append("Tự Đánh")
+                    if cbm.is_tansat:
+                        auto_list.append(f"Tàn Sát ({cbm.tansat_mode})")
+                    if cbm.auto_pick:
+                        auto_list.append("Tự Nhặt")
+                    if cbm.auto_pean:
+                        auto_list.append("Tự Dùng Đậu")
+                    if inst.client.auto_revive_manager.is_enabled:
+                        auto_list.append("Tự Hồi Sinh")
+                    if inst.client.auto.train_pet.is_enabled:
+                        auto_list.append("Úp Đệ")
+                    if inst.client.auto.train_new_acc.is_enabled:
+                        auto_list.append("NV Tân Thủ")
+                    auto_str = ", ".join(auto_list) if auto_list else "Không bật"
+
+                    card = (
+                        f"> *ĐÃ CHỌN TÀI KHOẢN: Acc #{acc_id} ({cname})* [ONLINE]\n"
+                        f"=============================\n"
+                        f"> Nhân vật:       *{cname}* ({gender_str}) | SM: *{format_big_number(char.cPower)}*\n"
+                        f"> HP:             *{char.cHP:,} / {char.cHPFull:,}* ({hp_pct}%) | KI: *{mp_pct}%*\n"
+                        f"> Vị trí:         *{map_name}* (Khu {zone_id:02d}) | X: `{char.cx}`, Y: `{char.cy}`\n"
+                        f"> Tiền tệ:        *{format_big_number(char.xu)} Xu* | *{char.luong:,}* Ngọc xanh\n"
+                        f"> Auto hiện tại:  *{auto_str}*\n"
+                        f"=============================\n"
+                        f"> *Lệnh nhanh:* `/info` > `/zone min` > `/ts on` > `/harvest` > `/item 14`"
+                    )
+                else:
+                    card = (
+                        f"> *ĐÃ CHỌN TÀI KHOẢN: Acc #{acc_id} ({cname})* [ONLINE]\n"
+                        f"=============================\n"
+                        f"> Đang đồng bộ dữ liệu nhân vật...\n"
+                        f"> *Lệnh nhanh:* `/info` > `/status` > `/map`"
+                    )
+            self.send_message(chat_id, card, reply_markup=self.get_main_keyboard(chat_id))
             return
 
         # ----------------------------------------------------------------------
         # B. Các lệnh menu & hướng dẫn cơ bản
         # ----------------------------------------------------------------------
-        if text.lower() in ("/start", "/help", "help", "trogiup", "/menu", "/keyboard", "/phim"):
+        if text.lower() == "/start":
+            self._send_welcome_message(chat_id)
+            return
+
+        if text.lower() in ("/help", "help", "trogiup", "/menu", "/keyboard", "/phim"):
             self._send_help_message(chat_id)
             return
 
@@ -927,12 +912,46 @@ class TelegramAIBot:
         # ----------------------------------------------------------------------
         # C. Bảng tổng hợp trạng thái
         # ----------------------------------------------------------------------
-        if text.lower() in ("/status", "status", "/st", "st", "list", "/list"):
+        if text.lower() in ("/status", "status", "/st", "st", "/stt", "stt", "list", "/list"):
             self._send_status_message(chat_id)
             return
 
         parts = text.split()
         first_token = parts[0].lower().lstrip("/")
+
+        # Tự động chuẩn hóa các alias lệnh viết tắt phổ biến
+        cmd_aliases = {
+            "st": "status",
+            "stt": "status",
+            "inf": "info",
+            "thongtin": "info",
+            "itm": "item",
+            "timitem": "item",
+            "checkitem": "item",
+            "finditem": "item",
+            "zn": "zone",
+            "zon": "zone",
+            "khu": "zone",
+            "mp": "map",
+            "bando": "map",
+            "dau": "harvest",
+            "nhatdau": "harvest",
+            "thuhoach": "harvest",
+            "caydau": "tree",
+            "tp": "trainpet",
+            "upde": "trainpet",
+            "ta": "trainacc",
+            "nvts": "trainacc",
+            "hp": "help",
+            "trogiup": "help",
+            "conn": "login",
+            "dangnhap": "login",
+            "dis": "logout",
+            "dangxuat": "logout",
+            "thoat": "logout",
+        }
+        if first_token in cmd_aliases:
+            first_token = cmd_aliases[first_token]
 
         sub_args = parts[1:]
 
@@ -969,6 +988,18 @@ class TelegramAIBot:
             if sub_cmd in ("map", "khu"):
                 self._send_map_message(chat_id, target_acc_id)
                 return
+            if sub_cmd in ("item", "timitem", "checkitem"):
+                self._send_item_search_message(chat_id, " ".join(sub_sub_args), target_acc_id)
+                return
+            if sub_cmd in ("zone",):
+                self._send_zone_message(chat_id, target_acc_id, sub_sub_args)
+                return
+            if sub_cmd in ("login", "start", "dangnhap"):
+                self._handle_login_cmd(chat_id, target_acc_id)
+                return
+            if sub_cmd in ("logout", "stop", "dangxuat"):
+                self._handle_logout_cmd(chat_id, target_acc_id)
+                return
             # Ngược lại là lệnh CLI trực tiếp cho acc đó (vd: /1 xmap 0, /1 zone 3)
             self._execute_direct_command(chat_id, f"acc {target_acc_id} " + " ".join(sub_args))
             return
@@ -979,6 +1010,56 @@ class TelegramAIBot:
         if first_token in ("info", "thongtin"):
             target_arg = sub_args[0] if sub_args else (str(curr_selected) if curr_selected else None)
             self._send_info_message(chat_id, target_arg)
+            return
+
+        # ----------------------------------------------------------------------
+        # E2. LỆNH /item (Tra cứu vật phẩm trong Balo)
+        # ----------------------------------------------------------------------
+        if first_token in ("item", "timitem", "checkitem", "finditem"):
+            if not sub_args:
+                self._send_item_search_message(chat_id, "", None)
+                return
+            # Nếu tham số cuối là ID acc hoặc 'all'
+            if len(sub_args) > 1 and (sub_args[-1].lower() in ("all", "tatca", "*") or sub_args[-1].isdigit()):
+                t_arg = sub_args[-1]
+                q_arg = " ".join(sub_args[:-1])
+            else:
+                t_arg = str(curr_selected) if curr_selected else None
+                q_arg = " ".join(sub_args)
+            self._send_item_search_message(chat_id, q_arg, t_arg)
+            return
+
+        # ----------------------------------------------------------------------
+        # E3. LỆNH /login VÀ /logout (Đăng nhập và Đăng xuất an toàn)
+        # ----------------------------------------------------------------------
+        if first_token in ("login", "dangnhap", "startacc", "connect"):
+            target_arg = sub_args[0] if sub_args else (str(curr_selected) if curr_selected else None)
+            self._handle_login_cmd(chat_id, target_arg)
+            return
+
+        if first_token in ("logout", "dangxuat", "stopacc", "disconnect", "dis"):
+            target_arg = sub_args[0] if sub_args else (str(curr_selected) if curr_selected else None)
+            self._handle_logout_cmd(chat_id, target_arg)
+            return
+
+        # ----------------------------------------------------------------------
+        # E4. LỆNH /zone VÀ /boss
+        # ----------------------------------------------------------------------
+        if first_token in ("zone",):
+            target_arg = str(curr_selected) if curr_selected else None
+            self._send_zone_message(chat_id, target_arg, sub_args)
+            return
+
+        if first_token in ("boss",):
+            # Nếu là lệnh bay tới boss: /boss go <tên>
+            if sub_args and sub_args[0].lower() in ("go", "goto", "den", "bay", "tele"):
+                cleaned_cmd = f"boss {' '.join(sub_args)}"
+                if curr_selected:
+                    cleaned_cmd = f"acc {curr_selected} {cleaned_cmd}"
+                self._execute_direct_command(chat_id, cleaned_cmd)
+                return
+            target_arg = str(curr_selected) if curr_selected else None
+            self._send_boss_message(chat_id, target_arg, sub_args)
             return
 
         # ----------------------------------------------------------------------
@@ -1133,7 +1214,11 @@ class TelegramAIBot:
             "autohs", "autors", "auto_revive", "hs", "revive", "hoisinh", "wake",
             "nvbm", "nhiemvu", "quest", "bomong", "useitem", "shuttle", "dual",
             "tele", "tp", "focus", "chat", "reconnect", "autoreconnect", "rec",
-            "telegram", "tg", "bot", "log", "mute", "cls", "clear", "exit", "quit"
+            "telegram", "tg", "bot", "log", "mute", "cls", "clear", "exit", "quit",
+            "trainpet", "upde", "autode", "petauto",
+            "trainacc", "newacc", "autonewacc", "nvts",
+            "harvest", "dau", "thuhoach", "pet", "detu",
+            "bag", "balo", "box", "ruong", "login", "logout"
         }
 
         if (text.startswith("/") and not text.startswith("/ai")) or (first_token in direct_commands):
@@ -1158,6 +1243,29 @@ class TelegramAIBot:
     # --------------------------------------------------------------------------
     # Các hàm phản hồi thông điệp
     # --------------------------------------------------------------------------
+    def _send_welcome_message(self, chat_id: Union[int, str]) -> None:
+        """Gửi thẻ chào mừng ấn tượng và tóm tắt trạng thái khi bắt đầu bot (/start)."""
+        acc_count = len(self.account_manager.accounts) if (self.account_manager and self.account_manager.accounts) else 0
+        online_count = sum(1 for a in self.account_manager.accounts if a.client and a.client.isConnected()) if acc_count > 0 else 0
+        rec_status = "BẬT" if (self.account_manager and self.account_manager.auto_reconnect) else "TẮT"
+        ai_status = f"BẬT ({self.ai_model})" if (self.ai_enabled and self.ai_api_key) else "TẮT"
+
+        welcome_text = (
+            "= *CLIENT NRO PY - TRUNG TÂM ĐIỀU KHIỂN TELEGRAM*\n"
+            "==============================\n"
+            f"> Trạng thái:      *{online_count}/{acc_count}* tài khoản [ONLINE]\n"
+            f"> Auto-Reconnect:  *{rec_status}* | Trợ lý AI: *{ai_status}*\n"
+            "==============================\n"
+            "= *HƯỚNG DẪN 4 BƯỚC SỬ DỤNG NHANH:*\n"
+            "> `1.` *Chọn tài khoản:* Nhấn các nút `Acc #1`, `Acc #2` bên dưới hoặc `[>] Tất cả [ALL]`.\n"
+            "> `2.` *Xem thông tin:* Gõ `/status` (tổng hợp), `/info` (chi tiết 100%), `/item 14` (tìm đồ).\n"
+            "> `3.` *Tự động hóa:* Gõ `/goto <map> min ts`, `/hunt on` (săn boss), `/harvest` (thu hoạch đậu).\n"
+            "> `4.` *Trợ lý AI:* Nhắn tin tiếng Việt tự nhiên bất kỳ để AI phân tích và điều khiển game!\n"
+            "==============================\n"
+            "> Bấm chọn tài khoản bên dưới để bắt đầu hoặc gõ `/help` để xem đầy đủ mọi lệnh!"
+        )
+        self.send_message(chat_id, welcome_text, reply_markup=self.get_main_keyboard(chat_id))
+
     def _send_help_message(self, chat_id: Union[int, str]) -> None:
         selected = self.selected_targets.get(chat_id)
         sel_text = f"Acc #{selected}" if selected else "TOÀN BỘ TÀI KHOẢN [ALL]"
@@ -1176,14 +1284,19 @@ class TelegramAIBot:
             "> `/ts [on|off]` : tàn sát quái | `/ak [on|off]` : tự đánh\n"
             "> `/harvest` : thu hoạch đậu thần\n\n"
             "= *2. XEM THÔNG TIN:*\n"
-            "> `/status` : bảng trạng thái các acc\n"
-            "> `/info [id|all]` : chi tiết 100% (HP, đệ, zone, balo, rương, đậu)\n"
-            "> `/bag` / `/box` / `/pet` / `/map` / `/combat [id|all]`\n\n"
-            "= *3. SĂN BOSS:*\n"
+            "> `/status` : bảng trạng thái các acc + thống kê săn boss & farm đồ\n"
+            "> `/info [id|all]` : thông tin chi tiết nhân vật & đệ tử, tiến độ boss\n"
+            "> `/item <id|tên> [id|all]` : tìm kiếm vật phẩm trong balo (vd: `/item 14`, `/item đậu`)\n"
+            "> `/bag` / `/box` / `/pet` / `/map` / `/zone` / `/combat [id|all]`\n\n"
+            "= *3. SĂN BOSS & DI CHUYỂN:*\n"
             "> `/hunt on` / `/hunt off` : bật/tắt Auto Săn Boss\n"
-            "> `/boss go <tên|stt>` : bay tới Boss | `/boss alive` : Boss đang sống\n"
+            "> `/boss` / `/boss alive` : xem boss đang sống & thành tích từng acc\n"
+            "> `/zone` / `/zone min` / `/zone <khu>` : xem danh sách khu & đổi khu\n"
+            "> `/map` : xem chi tiết bản đồ và tọa độ\n"
             "> `/nvbm [on|off]` : Auto NV Bò Mộng | `/autohs [on|off]` : tự hồi sinh\n\n"
-            "= *4. QUẢN LÝ TÀI KHOẢN & PROXY:*\n"
+            "= *4. ĐĂNG NHẬP & QUẢN LÝ TÀI KHOẢN:*\n"
+            "> `/login [id|all]` : đăng nhập / kết nối lại tài khoản\n"
+            "> `/logout [id|all]` : đăng xuất an toàn (dừng auto-reconnect)\n"
             "> `/adduser <user> <pass> [proxy]` (vd: `/adduser poopooi03 02082003`)\n"
             "> `/deluser <user|id>` : xóa acc | `/setpass <user|id> <mk_moi>` : đổi mk\n"
             "> `/addproxy <proxy>` / `/delproxy <stt>` / `/listproxy` : quản lý proxy\n"
@@ -1216,8 +1329,13 @@ class TelegramAIBot:
             f"Tổng số: *{len(accs)} acc* | Auto-Reconnect: *{'BẬT' if self.account_manager.auto_reconnect else 'TẮT'}*",
             "==============================",
         ]
+
+        total_boss_kills = 0
+        total_boss_loots = 0
+        recent_boss_kills = []
+
         for a in accs:
-            st_icon = "=" if a.status == "ONLINE" else (">" if a.status in ("CONNECTING", "RECONNECTING") else ":")
+            st_icon = "[ON]" if a.status == "ONLINE" else ("[~]" if a.status in ("CONNECTING", "RECONNECTING") else "[OFF]")
             cname = a.char_name if a.char_name != "Chưa vào" else a.config.username
             hp = a.hp_str
             mz = a.map_zone_str
@@ -1231,7 +1349,31 @@ class TelegramAIBot:
             lines.append(f"   > HP: `{hp}` | {mz}")
             lines.append(f"   > Trạng thái: *{status_text}* | Auto: `{auto}`")
 
+            # Bổ sung thống kê Săn Boss & Đồ farm của acc
+            if a.client:
+                bh = a.client.boss_hunter
+                kills = getattr(bh, "boss_kill_count", 0)
+                loots = getattr(bh, "boss_looted_items_count", 0)
+                is_hunt = getattr(bh, "is_hunting", False)
+                total_boss_kills += kills
+                total_boss_loots += loots
+
+                if kills > 0 or loots > 0 or is_hunt:
+                    lines.append(f"   > Săn Boss: Diệt *{kills}* boss | Farm *{loots}* đồ")
+
+                hist = getattr(bh, "boss_kill_history", [])
+                for h in hist:
+                    recent_boss_kills.append({**h, "acc_tag": a.tag})
+
         lines.append("==============================")
+        # Tổng kết toàn đội
+        if total_boss_kills > 0 or total_boss_loots > 0:
+            lines.append(f"> *Toàn đội Săn Boss:* Đã diệt *{total_boss_kills}* Boss | Nhặt *{total_boss_loots}* vật phẩm")
+
+        if recent_boss_kills:
+            last_k = recent_boss_kills[-1]
+            lines.append(f"> *Boss vừa hạ:* [{last_k['acc_tag']}] *{last_k['name']}* tại {last_k.get('map_name', '')} ({last_k.get('time', '')})")
+
         lines.append("> Bấm chọn nút tài khoản bên dưới hoặc gõ `/info 1` để xem chi tiết.")
         self.send_message(chat_id, "\n".join(lines))
 
@@ -1403,6 +1545,383 @@ class TelegramAIBot:
             self.send_message(chat_id, self.format_char_combat_info(inst))
         else:
             self.send_message(chat_id, "[x] Không tìm thấy tài khoản.")
+
+    def _send_item_search_message(self, chat_id: Union[int, str], query: str, target_arg: Optional[str] = None) -> None:
+        """Xử lý tra cứu vật phẩm trong balo: tìm theo ID hoặc tên."""
+        if not self.account_manager or not self.account_manager.accounts:
+            self.send_message(chat_id, "[!] Chưa có tài khoản nào được nạp.")
+            return
+
+        query_clean = query.strip()
+        if not query_clean:
+            self.send_message(
+                chat_id,
+                "= *TRA CỨU VẬT PHẨM TRONG BALO*\n"
+                "=============================\n"
+                "> Cú pháp: `/item <id|tên> [id|all]`\n"
+                "> _Ví dụ:_ `/item 14` (kiểm tra có item 14 không, đang có bao nhiêu)\n"
+                "> _Ví dụ:_ `/item đậu` hoặc `/item 14 all`"
+            )
+            return
+
+        is_query_numeric = query_clean.isdigit()
+        target_template_id = int(query_clean) if is_query_numeric else -1
+
+        # Xác định đối tượng tài khoản cần tìm
+        curr_selected = self.selected_targets.get(chat_id)
+        if target_arg and target_arg.lower() in ("all", "tatca", "*"):
+            targets = self.account_manager.accounts
+            is_multi = True
+        elif target_arg:
+            inst = self._resolve_account(target_arg)
+            targets = [inst] if inst else []
+            is_multi = False
+        elif curr_selected:
+            inst = self._resolve_account(str(curr_selected))
+            targets = [inst] if inst else []
+            is_multi = False
+        else:
+            # Ngữ cảnh ALL
+            targets = self.account_manager.accounts
+            is_multi = True
+
+        if not targets:
+            self.send_message(chat_id, f"[x] Không tìm thấy tài khoản '{target_arg}'.")
+            return
+
+        if not is_multi:
+            # Tra cứu trên 1 tài khoản
+            inst = targets[0]
+            if not inst.client or not inst.client.isConnected() or not inst.client.myChar:
+                self.send_message(chat_id, f"[!] [{inst.tag}] Tài khoản hiện chưa Online hoặc chưa vào map.")
+                return
+
+            bag = inst.client.myChar.arrItemBag
+            matched_items = []
+            for slot_idx, it in enumerate(bag):
+                match = False
+                if is_query_numeric and it.template_id == target_template_id:
+                    match = True
+                elif not is_query_numeric:
+                    it_name = get_item_display_name(it.template_id, it.info)
+                    if query_clean.lower() in it_name.lower():
+                        match = True
+                if match:
+                    matched_items.append((slot_idx, it))
+
+            if not matched_items:
+                self.send_message(
+                    chat_id,
+                    f"= *KẾT QUẢ TÌM VẬT PHẨM [{inst.tag}]*\n"
+                    f"=============================\n"
+                    f"[x] *Không tìm thấy* vật phẩm `{query_clean}` trong balo!\n"
+                    f"> Balo hiện đang có *{len(bag)}* món khác. Gõ `/bag` để xem toàn bộ."
+                )
+                return
+
+            # Gom nhóm và hiển thị
+            total_qty = sum(it.quantity for _, it in matched_items)
+            first_it = matched_items[0][1]
+            first_name = get_item_display_name(first_it.template_id, first_it.info)
+
+            lines = [
+                f"= *KẾT QUẢ TÌM VẬT PHẨM [{inst.tag}]*",
+                f"=============================",
+                f"> Vật phẩm: *{first_name}* (ID: `{first_it.template_id}`)",
+            ]
+
+            # Bổ sung thông tin chi tiết từ game_data
+            item_meta = get_item_info(first_it.template_id)
+            if item_meta:
+                t_name = get_item_type_name(item_meta.get("type", -1))
+                g_name = get_gender_name(item_meta.get("gender", 3))
+                lines.append(f"> Phân loại: *{t_name}* | Hành tinh: *{g_name}*")
+                sub_meta = []
+                lvl = item_meta.get("level", 0)
+                if lvl > 0:
+                    sub_meta.append(f"Cấp độ: *{lvl}*")
+                req_sm = item_meta.get("req", 0)
+                if req_sm > 0:
+                    sub_meta.append(f"Yêu cầu SM: *{format_big_number(req_sm)}*")
+                if sub_meta:
+                    lines.append(f"> " + " | ".join(sub_meta))
+                desc = item_meta.get("desc", "").strip()
+                if desc and desc != "...":
+                    lines.append(f"> Mô tả: _{desc}_")
+
+            lines.append(f"> Tổng số lượng trong balo: *x{total_qty:,}*")
+            lines.append(f"> Vị trí ô chứa ({len(matched_items)} ô):")
+            for slot_idx, it in matched_items:
+                opts = " | ".join([opt.getText() for opt in it.options[:2]])
+                opt_str = f" _{opts}_" if opts else ""
+                lines.append(f"  • Ô {slot_idx+1:02d}: x{it.quantity}{opt_str}")
+
+            if first_it.options:
+                all_opts = " | ".join([opt.getText() for opt in first_it.options])
+                lines.append(f"> Chỉ số/Thuộc tính: _{all_opts}_")
+
+            self.send_message(chat_id, "\n".join(lines))
+            return
+
+        # Tra cứu trên toàn bộ tài khoản (ALL)
+        lines = [
+            f"= *TỔNG HỢP VẬT PHẨM TRÊN TOÀN ĐỘI*",
+            f"> Từ khóa tìm kiếm: `{query_clean}`",
+        ]
+        if is_query_numeric:
+            meta_header = format_item_details(target_template_id)
+            if meta_header:
+                lines.append(f"> Thông tin: _{meta_header}_")
+
+        lines.append("=============================")
+        grand_total = 0
+        item_sample_name = ""
+        item_sample_id = None
+
+        for inst in targets:
+            if not inst.client or not inst.client.isConnected() or not inst.client.myChar:
+                lines.append(f"[-] *[{inst.tag}]*: (OFFLINE)")
+                continue
+
+            bag = inst.client.myChar.arrItemBag
+            matched = []
+            for slot_idx, it in enumerate(bag):
+                match = False
+                if is_query_numeric and it.template_id == target_template_id:
+                    match = True
+                elif not is_query_numeric:
+                    it_name = get_item_display_name(it.template_id, it.info)
+                    if query_clean.lower() in it_name.lower():
+                        match = True
+                if match:
+                    matched.append((slot_idx, it))
+
+            if matched:
+                acc_total = sum(it.quantity for _, it in matched)
+                grand_total += acc_total
+                if not item_sample_name:
+                    item_sample_name = get_item_display_name(matched[0][1].template_id, matched[0][1].info)
+                    item_sample_id = matched[0][1].template_id
+                slots_str = ", ".join([f"Ô {s+1:02d} (x{it.quantity})" for s, it in matched])
+                lines.append(f"[=] *[{inst.tag}]*: Có *x{acc_total:,}* ({slots_str})")
+            else:
+                lines.append(f"[x] *[{inst.tag}]*: Không có")
+
+        lines.append("=============================")
+        if grand_total > 0:
+            name_str = f" *{item_sample_name}*" if item_sample_name else ""
+            lines.append(f"> *TỔNG CỘNG TOÀN ĐỘI:*{name_str} *x{grand_total:,}* vật phẩm!")
+            if not is_query_numeric and item_sample_id is not None:
+                meta_footer = format_item_details(item_sample_id)
+                if meta_footer:
+                    lines.append(f"> Chi tiết vật phẩm: _{meta_footer}_")
+        else:
+            lines.append(f"[x] Không tài khoản nào có vật phẩm `{query_clean}` trong balo.")
+
+        self.send_message(chat_id, "\n".join(lines))
+
+    def _send_zone_message(self, chat_id: Union[int, str], target_arg: Optional[str] = None, sub_args: Optional[List[str]] = None) -> None:
+        """Xử lý lệnh /zone: Xem danh sách khu vực hoặc đổi khu."""
+        if not self.account_manager or not self.account_manager.accounts:
+            self.send_message(chat_id, "[!] Chưa có tài khoản nào được nạp.")
+            return
+
+        inst = self._resolve_account(target_arg)
+        if not inst or not inst.client or not inst.client.isConnected() or not inst.client.myChar:
+            self.send_message(chat_id, f"[!] Tài khoản chưa online hoặc chưa vào map.")
+            return
+
+        # Nếu có tham số đổi khu (vd: /zone min hoặc /zone 5)
+        if sub_args:
+            action = sub_args[0].lower()
+            if action in ("min", "least", "itnguoi", "vang", "empty", "auto"):
+                zid = inst.client.change_to_least_populated_zone()
+                if zid is not None:
+                    self.send_message(chat_id, f"[=] [{inst.tag}] Đã chuyển sang *Khu {zid:02d}* (khu vắng nhất)!")
+                else:
+                    self.send_message(chat_id, f"[!] [{inst.tag}] Đã ở khu vắng nhất hoặc không lấy được danh sách.")
+                return
+            elif action.isdigit():
+                zid = int(action)
+                inst.client.change_zone(zid)
+                self.send_message(chat_id, f"[=] [{inst.tag}] Đã gửi yêu cầu đổi sang *Khu {zid:02d}*!")
+                return
+
+        # Nếu không có tham số -> Hiển thị danh sách khu
+        inst.client.request_zones()
+        time.sleep(0.3)
+        m = inst.client.myChar.mapInfo
+        lines = [
+            f"= *DANH SÁCH KHU VỰC [{inst.tag}]*",
+            f"> Bản đồ: *{m.mapName}* (ID: `{m.mapID}`)",
+            f"> Khu hiện tại: *Khu {m.zoneID:02d}*",
+            f"=============================",
+        ]
+        if m.zones:
+            z_parts = []
+            for z in m.zones:
+                is_curr = (z.zoneId == m.zoneID)
+                curr_mark = " <=" if is_curr else ""
+                density = " [ĐẦY]" if z.numPlayer >= z.maxPlayer else (" [VẮNG]" if z.numPlayer <= 2 else "")
+                z_parts.append(f"*K{z.zoneId:02d}:* {z.numPlayer}/{z.maxPlayer}{density}{curr_mark}")
+
+            for i in range(0, len(z_parts), 3):
+                lines.append(" | ".join(z_parts[i:i+3]))
+        else:
+            lines.append("Chưa tải được danh sách khu. Vui lòng thử lại sau 1s.")
+
+        lines.append("=============================")
+        lines.append("> *Thao tác:* Gõ `/zone <số>` để đổi khu, hoặc `/zone min` để vào khu vắng nhất.")
+        self.send_message(chat_id, "\n".join(lines))
+
+    def _send_boss_message(self, chat_id: Union[int, str], target_arg: Optional[str] = None, sub_args: Optional[List[str]] = None) -> None:
+        """Xử lý lệnh /boss: Hiển thị Boss đang sống + Thống kê Boss bị tiêu diệt và đồ farm của từng acc."""
+        if not self.account_manager or not self.account_manager.accounts:
+            self.send_message(chat_id, "[!] Chưa có tài khoản nào được nạp.")
+            return
+
+        accs = self.account_manager.accounts
+        lines = [
+            "= *BẢNG THEO DÕI & THỐNG KÊ SĂN BOSS*",
+            "=============================",
+        ]
+
+        # 1. Boss đang sống / xuất hiện
+        alive_bosses = []
+        for a in accs:
+            if a.client and hasattr(a.client, "boss_manager"):
+                for b in a.client.boss_manager.get_alive_bosses():
+                    b_key = f"{b.get('name')}:{b.get('map_name')}"
+                    if not any(f"{x.get('name')}:{x.get('map_name')}" == b_key for x in alive_bosses):
+                        alive_bosses.append(b)
+
+        lines.append("= *1. BOSS ĐANG XUẤT HIỆN:*")
+        if alive_bosses:
+            for i, b in enumerate(alive_bosses[:10]):
+                z_str = f" (Khu {b.get('zone_id')})" if b.get('zone_id', -1) >= 0 else ""
+                lines.append(f"  `{i+1:02d}.` *{b.get('name')}* tại *{b.get('map_name')}*{z_str}")
+        else:
+            lines.append("  (Hiện chưa có Boss nào được phát hiện)")
+
+        # 2. Bảng thành tích săn boss của từng acc
+        lines.append("\n= *2. THÀNH TÍCH SĂN BOSS TỪNG TÀI KHOẢN:*")
+        total_kills = 0
+        total_loots = 0
+        all_histories = []
+
+        for a in accs:
+            bh = a.client.boss_hunter if a.client else None
+            kills = getattr(bh, "boss_kill_count", 0) if bh else 0
+            loots = getattr(bh, "boss_looted_items_count", 0) if bh else 0
+            hunting_str = "[ON] Đang săn" if (bh and getattr(bh, "is_hunting", False)) else "[OFF] Tắt"
+            total_kills += kills
+            total_loots += loots
+
+            lines.append(f"> *Acc #{a.config.acc_id}* ({a.char_name}): Diệt *{kills}* Boss | Farm *{loots}* đồ [{hunting_str}]")
+
+            if bh and hasattr(bh, "boss_kill_history"):
+                for h in bh.boss_kill_history:
+                    all_histories.append({**h, "acc_tag": a.tag})
+
+        lines.append(f"> *Toàn đội:* Đã hạ *{total_kills}* Boss | Thu hoạch *{total_loots}* vật phẩm!")
+
+        # 3. Lịch sử hạ boss gần đây
+        if all_histories:
+            lines.append("\n= *3. LỊCH SỬ HẠ BOSS GẦN ĐÂY:*")
+            for h in all_histories[-5:]:
+                lines.append(f"  • [{h['acc_tag']}] Tiêu diệt *{h['name']}* tại {h.get('map_name', 'Chưa rõ')} ({h.get('time', '')})")
+
+        lines.append("=============================")
+        lines.append("> *Lệnh:* `/hunt on` | `/hunt off` | `/boss go <tên boss>`")
+        self.send_message(chat_id, "\n".join(lines))
+
+    def _handle_login_cmd(self, chat_id: Union[int, str], target_arg: Optional[str] = None) -> None:
+        """Xử lý lệnh /login: Đăng nhập cho acc đang chọn hoặc toàn bộ acc."""
+        if not self.account_manager or not self.account_manager.accounts:
+            self.send_message(chat_id, "[!] Chưa có tài khoản nào được nạp.")
+            return
+
+        curr_selected = self.selected_targets.get(chat_id)
+        if target_arg and target_arg.lower() in ("all", "tatca", "*"):
+            self.account_manager.start_all(delay=1.5)
+            self.send_message(
+                chat_id,
+                f"[=] *[ĐĂNG NHẬP]* Đang gửi yêu cầu kết nối lại cho TOÀN BỘ ({len(self.account_manager.accounts)}) tài khoản...",
+                reply_markup=self.get_main_keyboard(chat_id)
+            )
+            return
+
+        if target_arg:
+            inst = self._resolve_account(target_arg)
+        elif curr_selected:
+            inst = self._resolve_account(str(curr_selected))
+        else:
+            # Ngữ cảnh ALL -> start all
+            self.account_manager.start_all(delay=1.5)
+            self.send_message(
+                chat_id,
+                f"[=] *[ĐĂNG NHẬP]* Đang gửi yêu cầu kết nối lại cho TOÀN BỘ ({len(self.account_manager.accounts)}) tài khoản...",
+                reply_markup=self.get_main_keyboard(chat_id)
+            )
+            return
+
+        if not inst:
+            self.send_message(chat_id, f"[x] Không tìm thấy tài khoản '{target_arg}'.")
+            return
+
+        if inst.client and inst.client.isConnected():
+            self.send_message(chat_id, f"[i] [{inst.tag}] Tài khoản đã đang ONLINE!")
+            return
+
+        inst.is_manual_stopping = False
+        ok = self.account_manager.start_account(inst)
+        st_text = "Thành công" if ok else "Đang kết nối..."
+        self.send_message(
+            chat_id,
+            f"[=] *[ĐĂNG NHẬP]* Đang kết nối tài khoản *{inst.tag}* ({st_text})...",
+            reply_markup=self.get_main_keyboard(chat_id)
+        )
+
+    def _handle_logout_cmd(self, chat_id: Union[int, str], target_arg: Optional[str] = None) -> None:
+        """Xử lý lệnh /logout: Đăng xuất an toàn và ngắt kết nối cho acc đang chọn hoặc toàn bộ acc."""
+        if not self.account_manager or not self.account_manager.accounts:
+            self.send_message(chat_id, "[!] Chưa có tài khoản nào được nạp.")
+            return
+
+        curr_selected = self.selected_targets.get(chat_id)
+        if target_arg and target_arg.lower() in ("all", "tatca", "*"):
+            self.account_manager.stop_all()
+            self.send_message(
+                chat_id,
+                f"[x] *[ĐĂNG XUẤT]* Đã ngắt kết nối an toàn TOÀN BỘ tài khoản (đã dừng auto-reconnect).",
+                reply_markup=self.get_main_keyboard(chat_id)
+            )
+            return
+
+        if target_arg:
+            inst = self._resolve_account(target_arg)
+        elif curr_selected:
+            inst = self._resolve_account(str(curr_selected))
+        else:
+            # Ngữ cảnh ALL -> stop all
+            self.account_manager.stop_all()
+            self.send_message(
+                chat_id,
+                f"[x] *[ĐĂNG XUẤT]* Đã ngắt kết nối an toàn TOÀN BỘ tài khoản (đã dừng auto-reconnect).",
+                reply_markup=self.get_main_keyboard(chat_id)
+            )
+            return
+
+        if not inst:
+            self.send_message(chat_id, f"[x] Không tìm thấy tài khoản '{target_arg}'.")
+            return
+
+        self.account_manager.stop_account(inst)
+        self.send_message(
+            chat_id,
+            f"[x] *[ĐĂNG XUẤT]* Đã ngắt kết nối an toàn cho *{inst.tag}* (đã dừng auto-reconnect)!",
+            reply_markup=self.get_main_keyboard(chat_id)
+        )
 
     def _execute_direct_command(self, chat_id: Union[int, str], cmd_line: str) -> None:
         """Thực thi lệnh CLI thông qua command_handler và phản hồi kết quả."""

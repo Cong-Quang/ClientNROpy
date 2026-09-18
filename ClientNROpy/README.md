@@ -4,7 +4,7 @@
 
 ---
 
-## 📍 Cấu Trúc Mã Nguồn (Nó Ở Đâu?)
+## [=] Cấu Trúc Mã Nguồn (Nó Ở Đâu?)
 
 ### 1. Hệ thống Chiến Đấu & Tàn Sát (`Mod/PickMob/`, `Mod/Auto/`, `Mod/Utils.cs`)
 - [`ClientNROpy/combat_manager.py`](file:///c:/data/nro/ClientNROpy/combat_manager.py): Bộ điều khiển trung tâm `CombatManager` quản lý:
@@ -53,7 +53,7 @@
 
 ---
 
-## 🎯 Chi Tiết Tính Năng Chiến Đấu & Tàn Sát
+## [=] Chi Tiết Tính Năng Chiến Đấu & Tàn Sát
 
 | Tính Năng | Lệnh CLI | Mô Tả |
 | :--- | :--- | :--- |
@@ -72,7 +72,7 @@
 
 ---
 
-## 🐂 Auto Nhiệm Vụ Bò Mộng Hằng Ngày
+## [=] Auto Nhiệm Vụ Bò Mộng Hằng Ngày
 
 | Tính Năng | Lệnh CLI | Mô Tả |
 | :--- | :--- | :--- |
@@ -84,7 +84,7 @@ API tương ứng trong `ClientNRO`: `start_auto_quest()` / `stop_auto_quest()` 
 
 ---
 
-## 🚀 Cách Sử Dụng Dòng Lệnh (CLI)
+## [=] Cách Sử Dụng Dòng Lệnh (CLI)
 
 Khởi động client:
 ```powershell
@@ -93,7 +93,7 @@ python -m ClientNROpy.main
 
 Tại dấu nhắc `nro> `, các lệnh hỗ trợ:
 
-### ⚔️ Chiến Đấu & Tàn Sát:
+### [>] Chiến Đấu & Tàn Sát:
 - `focus mob`: Focus vào con quái gần nhất trong map.
 - `focus char Broly`: Focus vào nhân vật có tên chứa 'Broly'.
 - `focus clear`: Bỏ chọn mục tiêu focus.
@@ -111,12 +111,12 @@ Tại dấu nhắc `nro> `, các lệnh hỗ trợ:
 - `abf 30`: Bật tự động dùng đậu khi HP/KI dưới 30%.
 - `combat`: Xem bảng trạng thái cấu hình chiến đấu.
 
-### 🐂 Auto Nhiệm Vụ Bò Mộng:
+### [>] Auto Nhiệm Vụ Bò Mộng:
 - `nvbm on`: Bật auto NV Bò Mộng (farm + trả NV liên tục).
 - `nvbm off`: Tắt auto NV Bò Mộng.
 - `nvbm status`: Xem giai đoạn, NV hiện tại, số NV đã trả, tổng kill.
 
-### 🎯 Tự Động Săn Boss (Auto Hunt):
+### [>] Tự Động Săn Boss (Auto Hunt):
 - `hunt`: Bật / Tắt máy tự động săn Boss.
 - `hunt status`: Xem bảng trạng thái chi tiết (mục tiêu, FSM, tiến độ dò khu).
 - `hunt delay <min> [max]`: Cài đặt thời gian ngẫu nhiên dừng ở mỗi khu để dò Boss (mặc định: `0.5s - 0.7s`).
@@ -128,13 +128,13 @@ Tại dấu nhắc `nro> `, các lệnh hỗ trợ:
 - `hunt revive`: Bật / Tắt tự động hồi sinh và quay lại map Boss.
 - `hunt clear`: Xoá toàn bộ Whitelist.
 
-### 👑 Quản Lý & Săn Boss Thủ Công:
+### [>] Quản Lý & Săn Boss Thủ Công:
 - `boss`: Xem danh sách các Boss đang còn sống (STT, Tên, Map, Khu, Thời gian).
 - `boss all`: Xem toàn bộ lịch sử các Boss (kể cả đã bị tiêu diệt và người hạ).
 - `boss go <stt|tên>`: Tự động dùng Xmap bay đến map của Boss và tự chuyển sang đúng khu của Boss!
 - `boss clear`: Xóa danh sách lịch sử Boss đã lưu.
 
-### 🗺️ Tự Động Tìm Đường Xmap:
+### [>] Tự Động Tìm Đường Xmap:
 - `xmap <id|tên>`: Di chuyển đến map chỉ định (Ví dụ: `xmap 0`, `xmap 6`, `xmap 109`, `xmap nha`, `xmap cold`).
 - `xmap status`: Xem trạng thái, tiến độ và cấu hình Capsule.
 - `xmap csvip`: Bật / Tắt dùng **Capsule Đặc Biệt (ID 194)** bay thẳng (mặc định: BẬT).
@@ -143,7 +143,7 @@ Tại dấu nhắc `nro> `, các lệnh hỗ trợ:
 - `xmap path <from> <to>`: Tra cứu lộ trình tối ưu giữa 2 map (Ví dụ: `xmap path 0 109`).
 - `xmap list`: Xem danh sách tất cả các map theo hành tinh.
 
-### 🛠️ Tiện Ích Khác:
+### [>] Tiện Ích Khác:
 - `map`: Xem thông tin map hiện tại, toạ độ x, y và waypoints.
 - `zone [id]`: Xem danh sách khu vực hoặc đổi khu (Ví dụ: `zone 5`).
 - `chat <nội dung>`: Gửi tin nhắn chat trong bản đồ.
@@ -153,14 +153,14 @@ Tại dấu nhắc `nro> `, các lệnh hỗ trợ:
 
 ---
 
-## 📦 Gói Tin Đã Soát (Audit vs Controller.cs)
+## [=] Gói Tin Đã Soát (Audit vs Controller.cs)
 
 Bổ sung các sub còn thiếu của `-30`: `6` (KI bản thân), `13` (HP bản thân/người khác — phát hiện chết), `14`/`15` (HP/hồi sinh người khác), `23` (học skill mới), `35` (trạng thái PK). Trước đó KI không bao giờ đồng bộ và HP bản thân thiếu 1 kênh cập nhật.
 
 Cứng hóa `-36` (balo): log chẩn đoán `sub` + số byte còn lại thay vì crash im lặng.
 Phát hiện qua log live: `-36` full-bag của server gửi capacity (80) nhưng chỉ liệt kê slot đã dùng (37) rồi hết buffer (bản C# cũng crash im lặng chỗ này) — đã sửa thành đọc tới hết buffer. Log `-42` throttle theo % HP/MP đổi để không flood console.
 
-## ⚡ Kiểm Chứng Thực Tế Trên Server Game (Live Server Verified)
+## [=] Kiểm Chứng Thực Tế Trên Server Game (Live Server Verified)
 
 Toàn bộ hệ thống đã được kiểm thử và xác nhận hoạt động thực tế trên server game:
 - Đăng nhập, đồng bộ nhân vật, balo, đệ tử và cây đậu thần.

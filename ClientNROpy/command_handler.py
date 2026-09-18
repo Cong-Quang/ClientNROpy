@@ -15,6 +15,7 @@ import os
 import sys
 import time
 import re
+import difflib
 from typing import Optional, Union, Tuple, List
 
 from .client import ClientNRO
@@ -23,6 +24,7 @@ from .display import (
     print_cli_help,
     print_character_overview,
     print_inventory,
+    print_pet_info,
     print_map_and_zones,
     print_boss_list,
     print_hunt_status,
@@ -31,7 +33,57 @@ from .display import (
     print_accounts_table,
 )
 from .xmap import resolve_map_id, get_map_name, GROUP_MAPS_DEF
+from .game_data import (
+    get_item_name,
+    get_mob_name,
+    get_npc_name,
+    get_item_info,
+    format_item_details,
+    format_big_number,
+)
 
+# Bảng alias lệnh viết tắt phổ biến trong Terminal
+CLI_ALIASES = {
+    "stt": "status",
+    "st": "status",
+    "ls": "status",
+    "inf": "info",
+    "thongtin": "info",
+    "itm": "item",
+    "timitem": "item",
+    "checkitem": "item",
+    "finditem": "item",
+    "zon": "zone",
+    "zn": "zone",
+    "khu": "zone",
+    "mp": "map",
+    "bando": "map",
+    "dau": "harvest",
+    "nhatdau": "harvest",
+    "thuhoach": "harvest",
+    "caydau": "tree",
+    "tp": "trainpet",
+    "upde": "trainpet",
+    "ta": "trainacc",
+    "nvts": "trainacc",
+    "h": "help",
+    "trogiup": "help",
+    "conn": "login",
+    "dangnhap": "login",
+    "dis": "logout",
+    "dangxuat": "logout",
+    "thoat": "logout",
+}
+
+# Danh sách toàn bộ các lệnh hợp lệ để gợi ý khi người dùng gõ nhầm (Fuzzy suggestion)
+ALL_KNOWN_COMMANDS = [
+    "status", "use", "all", "acc", "login", "logout", "reconnect",
+    "item", "zone", "map", "info", "bag", "box", "pet", "harvest",
+    "xmap", "goto", "hunt", "boss", "ak", "ts", "tansat",
+    "anhat", "cnn", "nsq", "abf", "autohs", "trainpet", "trainacc",
+    "nvbm", "shuttle", "chat", "cls", "clear", "log", "mute",
+    "telegram", "proxy", "help", "exit", "quit"
+]
 
 _TRAVEL_ZONE_KEYS = ("min", "least", "itnguoi", "vang", "empty", "auto")
 _TRAVEL_ACTIONS = {
@@ -90,6 +142,8 @@ def execute_client_command(client: ClientNRO, line: str) -> bool:
 
     parts = line.split()
     cmd = parts[0].lower()
+    if cmd in CLI_ALIASES:
+        cmd = CLI_ALIASES[cmd]
     args = parts[1:]
 
     if cmd in ("exit", "quit", "q"):
@@ -104,8 +158,79 @@ def execute_client_command(client: ClientNRO, line: str) -> bool:
         print_character_overview(client.myChar)
         print_inventory(client.myChar)
 
+    elif cmd in ("bag", "balo", "tui"):
+        print_inventory(client.myChar)
+
+    elif cmd in ("box", "ruong"):
+        char = client.myChar
+        print("\n" + "-" * 55)
+        print(f"RƯƠNG ĐỒ [{tag}] ({len(char.arrItemBox)} món)")
+        print("-" * 55)
+        if not char.arrItemBox:
+            print("  (Rương trống)")
+        for i, it in enumerate(char.arrItemBox):
+            opts = " | ".join([opt.getText() for opt in it.options])
+            opt_str = f" [{opts}]" if opts else ""
+            it_name = get_item_name(it.template_id, it.info or "")
+            print(f"  [{i+1:02d}] {it_name} (ID: {it.template_id}) x{it.quantity:<4}{opt_str}")
+
+    elif cmd in ("pet", "detu"):
+        action_map = {
+            "0": 0, "follow": 0, "dtheo": 0, "theo": 0,
+            "1": 1, "protect": 1, "baove": 1, "bv": 1,
+            "2": 2, "attack": 2, "tancong": 2, "tc": 2, "danh": 2,
+            "3": 3, "home": 3, "venha": 3, "nha": 3,
+            "4": 4, "fuse": 4, "hopthe": 4, "ht": 4,
+            "5": 5, "porata": 5, "bongtai": 5,
+        }
+        if not args:
+            print_pet_info(client.myChar.pet)
+        elif args[0].lower() in action_map:
+            act_code = action_map[args[0].lower()]
+            client.change_pet_status(act_code)
+            st_names = {0: "Đi theo", 1: "Bảo vệ", 2: "Tấn công", 3: "Về nhà", 4: "Hợp thể", 5: "Hợp thể Porata"}
+            logger.system(f"Đã chuyển trạng thái đệ tử sang: {st_names.get(act_code)}", account_tag=tag)
+        else:
+            print("Cú pháp: pet [follow|protect|attack|home|fuse|porata|0-5]")
+
+    elif cmd in ("harvest", "dau", "caydau", "nhatdau"):
+        client.request_magic_tree(action=2)
+        logger.system("Đã gửi yêu cầu thu hoạch đậu thần từ cây đậu.", account_tag=tag)
+
     elif cmd == "map":
         print_map_and_zones(client.myChar.mapInfo)
+
+    elif cmd in ("item", "timitem", "checkitem"):
+        if not args:
+            print("Cú pháp: item <id|tên vật phẩm> (Ví dụ: item 14 hoặc item đậu)")
+        else:
+            q = " ".join(args).lower().strip()
+            is_num = q.isdigit()
+            tid = int(q) if is_num else -1
+            bag = client.myChar.arrItemBag
+            matched = []
+            for s_idx, it in enumerate(bag):
+                match = False
+                it_name = get_item_name(it.template_id, it.info or "")
+                if is_num and it.template_id == tid:
+                    match = True
+                elif not is_num:
+                    if q in it_name.lower() or q in (it.info or "").lower():
+                        match = True
+                if match:
+                    matched.append((s_idx, it, it_name))
+            if matched:
+                tot = sum(it.quantity for _, it, _ in matched)
+                print(f"[*] Tìm thấy {len(matched)} ô chứa (Tổng cộng: x{tot:,}) [{tag}]:")
+                sample_tid = matched[0][1].template_id
+                meta_str = format_item_details(sample_tid)
+                if meta_str:
+                    print(f"    - [Thông tin]: {meta_str}")
+                for s_idx, it, it_name in matched:
+                    opt_str = f" [{ ' | '.join(opt.getText() for opt in it.options[:2]) }]" if it.options else ""
+                    print(f"    - Ô {s_idx+1:02d}: x{it.quantity} {it_name} (ID: {it.template_id}){opt_str}")
+            else:
+                print(f"[x] Không tìm thấy vật phẩm '{q}' trong balo của [{tag}].")
 
     elif cmd == "zone":
         if args and args[0].lower() in ("min", "least", "itnguoi", "vang", "auto", "empty"):
@@ -247,6 +372,19 @@ def execute_client_command(client: ClientNRO, line: str) -> bool:
             elif sub in ("loot", "nhatdo"):
                 client.boss_hunter.auto_loot = not client.boss_hunter.auto_loot
                 logger.system(f"Tự nhặt đồ khi diệt Boss: {'BẬT' if client.boss_hunter.auto_loot else 'TẮT'}!", account_tag=tag)
+            elif sub in ("combo", "skill", "skills"):
+                if len(args) > 1:
+                    sids = []
+                    for a in args[1:]:
+                        if a.isdigit():
+                            sids.append(int(a))
+                    if sids:
+                        ok, msg = client.set_combo_skills(sids)
+                        logger.system(msg, account_tag=tag)
+                    else:
+                        print("Cú pháp: hunt combo <skill_id_1> <skill_id_2> <skill_id_3>")
+                else:
+                    print("Cú pháp: hunt combo <skill_id_1> <skill_id_2> <skill_id_3>")
             elif sub in ("patrol", "tuantra"):
                 if len(args) > 1:
                     pmode = args[1].lower()
@@ -443,7 +581,13 @@ def execute_client_command(client: ClientNRO, line: str) -> bool:
             print("Cú pháp: trainacc [on|off|status]")
 
     else:
-        print(f"Không rõ lệnh '{cmd}'. Gõ 'help' để xem danh sách lệnh.")
+        matches = difflib.get_close_matches(cmd, ALL_KNOWN_COMMANDS, n=2, cutoff=0.55)
+        if matches:
+            suggestion_str = " hoặc ".join([f"'{m}'" for m in matches])
+            print(f"Không rõ lệnh '{cmd}'. Có phải bạn muốn dùng: {suggestion_str}?")
+            print("Gõ 'help' để xem danh sách lệnh.")
+        else:
+            print(f"Không rõ lệnh '{cmd}'. Gõ 'help' để xem danh sách lệnh.")
 
     return True
 
@@ -514,6 +658,8 @@ def execute_multi_command(
 
     parts = line.split()
     cmd = parts[0].lower()
+    if cmd in CLI_ALIASES:
+        cmd = CLI_ALIASES[cmd]
     args = parts[1:]
 
     # 1. Thoát chương trình
@@ -825,6 +971,103 @@ def execute_multi_command(
                 print("Cú pháp: proxy del <stt | proxy>")
             return True, active_target
 
+    # 7c. Đăng nhập / Đăng xuất trực tiếp
+    if cmd in ("login", "dangnhap"):
+        target_str = args[0] if args else (str(active_target) if active_target is not None else "all")
+        if target_str.lower() in ("all", "tatca", "*"):
+            account_manager.start_all()
+        else:
+            inst = account_manager.get_account(target_str)
+            if inst:
+                account_manager.start_account(inst)
+            else:
+                print(f"[!] Không tìm thấy tài khoản '{target_str}'.")
+        return True, active_target
+
+    if cmd in ("logout", "dangxuat"):
+        target_str = args[0] if args else (str(active_target) if active_target is not None else "all")
+        if target_str.lower() in ("all", "tatca", "*"):
+            account_manager.stop_all()
+        else:
+            inst = account_manager.get_account(target_str)
+            if inst:
+                account_manager.stop_account(inst)
+            else:
+                print(f"[!] Không tìm thấy tài khoản '{target_str}'.")
+        return True, active_target
+
+    # 7d. Thu hoạch đậu thần & Đệ tử cho toàn bộ hoặc nhiều tài khoản
+    if cmd in ("harvest", "dau", "caydau", "nhatdau"):
+        connected_accs = [a for a in account_manager.accounts if a.client and a.client.isConnected()]
+        if not connected_accs:
+            print("[!] Không có tài khoản nào đang online để thu hoạch đậu.")
+            return True, active_target
+        for a in connected_accs:
+            a.client.request_magic_tree(action=2)
+        print(f"[*] Đã gửi yêu cầu thu hoạch đậu thần cho {len(connected_accs)} tài khoản.")
+        return True, active_target
+
+    if cmd in ("pet", "detu"):
+        action_map = {
+            "0": 0, "follow": 0, "dtheo": 0, "theo": 0,
+            "1": 1, "protect": 1, "baove": 1, "bv": 1,
+            "2": 2, "attack": 2, "tancong": 2, "tc": 2, "danh": 2,
+            "3": 3, "home": 3, "venha": 3, "nha": 3,
+            "4": 4, "fuse": 4, "hopthe": 4, "ht": 4,
+            "5": 5, "porata": 5, "bongtai": 5,
+        }
+        if args and args[0].lower() in action_map:
+            act_code = action_map[args[0].lower()]
+            connected_accs = [a for a in account_manager.accounts if a.client and a.client.isConnected()]
+            for a in connected_accs:
+                a.client.change_pet_status(act_code)
+            st_names = {0: "Đi theo", 1: "Bảo vệ", 2: "Tấn công", 3: "Về nhà", 4: "Hợp thể", 5: "Hợp thể Porata"}
+            print(f"[*] Đã chuyển trạng thái đệ tử sang: {st_names.get(act_code)} cho {len(connected_accs)} tài khoản.")
+            return True, active_target
+
+    # 7e. Tra cứu vật phẩm toàn đội (item <id|tên> all hoặc khi không chọn acc nào)
+    if cmd in ("item", "timitem", "checkitem") and (args and (args[-1].lower() in ("all", "tatca", "*") or active_target is None)):
+        q_args = args[:-1] if (args and args[-1].lower() in ("all", "tatca", "*")) else args
+        q = " ".join(q_args).lower().strip()
+        if not q:
+            print("Cú pháp: item <id|tên> [all]")
+            return True, active_target
+        is_num = q.isdigit()
+        tid = int(q) if is_num else -1
+        grand_total = 0
+        sample_tid = None
+        print(f"\n[*] TỔNG HỢP VẬT PHẨM TOÀN ĐỘI: '{q}'")
+        if is_num:
+            meta_h = format_item_details(tid)
+            if meta_h:
+                print(f"    - [Thông tin]: {meta_h}")
+        for a in account_manager.accounts:
+            if not a.client or not a.client.isConnected() or not a.client.myChar:
+                print(f"    - {a.tag:<20}: (OFFLINE)")
+                continue
+            bag = a.client.myChar.arrItemBag
+            matched = []
+            for s_idx, it in enumerate(bag):
+                it_name = get_item_name(it.template_id, it.info or "")
+                if (is_num and it.template_id == tid) or (not is_num and (q in it_name.lower() or q in (it.info or "").lower())):
+                    matched.append((s_idx, it, it_name))
+            if matched:
+                sub_tot = sum(it.quantity for _, it, _ in matched)
+                grand_total += sub_tot
+                sample_name = matched[0][2]
+                sample_tid = matched[0][1].template_id
+                slots_str = ", ".join([f"Ô {s+1:02d} (x{it.quantity})" for s, it, _ in matched])
+                print(f"    - {a.tag:<20}: Có x{sub_tot} *{sample_name}* ({slots_str})")
+            else:
+                print(f"    - {a.tag:<20}: [Không có]")
+        print(f"[*] TỔNG CỘNG TOÀN ĐỘI: x{grand_total:,} vật phẩm!")
+        if grand_total > 0 and not is_num and sample_tid is not None:
+            meta_f = format_item_details(sample_tid)
+            if meta_f:
+                print(f"    - [Thông tin]: {meta_f}")
+        print()
+        return True, active_target
+
     # 8. Thực thi lệnh trên TẤT CẢ các tài khoản (all <cmd>)
     if cmd == "all":
         if not args:
@@ -866,5 +1109,11 @@ def execute_multi_command(
                 logger.error(f"Lỗi khi thực thi '{line}': {ex}", account_tag=a.tag)
         return True, active_target
     else:
-        print(f"Không rõ lệnh '{cmd}'. Gõ 'help' hoặc 'status' để xem trạng thái.")
+        matches = difflib.get_close_matches(cmd, ALL_KNOWN_COMMANDS, n=2, cutoff=0.55)
+        if matches:
+            suggestion_str = " hoặc ".join([f"'{m}'" for m in matches])
+            print(f"Không rõ lệnh '{cmd}'. Có phải bạn muốn dùng: {suggestion_str}?")
+            print("Gõ 'help' hoặc 'status' để xem danh sách lệnh.")
+        else:
+            print(f"Không rõ lệnh '{cmd}'. Gõ 'help' hoặc 'status' để xem trạng thái.")
         return True, active_target
