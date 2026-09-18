@@ -73,6 +73,8 @@ CLI_ALIASES = {
     "dis": "logout",
     "dangxuat": "logout",
     "thoat": "logout",
+    "tudong": "auto",
+    "autors": "autohs",
 }
 
 # Danh sách toàn bộ các lệnh hợp lệ để gợi ý khi người dùng gõ nhầm (Fuzzy suggestion)
@@ -80,7 +82,7 @@ ALL_KNOWN_COMMANDS = [
     "status", "use", "all", "acc", "login", "logout", "reconnect",
     "item", "zone", "map", "info", "bag", "box", "pet", "harvest",
     "xmap", "goto", "hunt", "boss", "ak", "ts", "tansat",
-    "anhat", "cnn", "nsq", "abf", "autohs", "trainpet", "trainacc",
+    "anhat", "cnn", "nsq", "abf", "autohs", "hs", "auto", "trainpet", "trainacc",
     "nvbm", "shuttle", "chat", "cls", "clear", "log", "mute",
     "telegram", "proxy", "help", "exit", "quit"
 ]
@@ -235,9 +237,13 @@ def execute_client_command(client: ClientNRO, line: str) -> bool:
     elif cmd == "zone":
         if args and args[0].lower() in ("min", "least", "itnguoi", "vang", "auto", "empty"):
             logger.system("Đang tìm và chuyển sang khu vực ít người nhất...", account_tag=tag)
+            curr_zid = getattr(client.myChar.mapInfo, "zoneID", -1) if client.myChar and client.myChar.mapInfo else -1
             zid = client.change_to_least_populated_zone()
             if zid is not None:
-                logger.system(f"Đã chuyển thành công sang Khu {zid} (ít người nhất).", account_tag=tag)
+                if zid == curr_zid:
+                    logger.system(f"Đang ở Khu {zid:02d} (đã là khu ít người nhất, giữ nguyên không đổi).", account_tag=tag)
+                else:
+                    logger.system(f"Đã chuyển thành công sang Khu {zid:02d} (ít người nhất).", account_tag=tag)
             else:
                 logger.warn("Không lấy được danh sách khu hoặc đã ở khu tối ưu.", account_tag=tag)
         elif args and args[0].isdigit():
@@ -259,23 +265,64 @@ def execute_client_command(client: ClientNRO, line: str) -> bool:
             print("Cú pháp: chat <nội dung>")
 
     elif cmd in ("hs", "revive", "hoisinh", "wake"):
-        at_place = False
-        if args and args[0].lower() in ("ngoc", "gem", "place", "here", "1"):
-            at_place = True
-        ok, msg = client.revive(at_place=at_place)
-        logger.system(f"Hồi sinh: {msg}", account_tag=tag)
+        sub = args[0].lower() if args else ""
+        if sub in ("on", "start", "1", "true", "bat"):
+            if len(args) > 1 and args[1].lower() in ("gem", "ngoc"):
+                client.set_auto_revive_mode("gem")
+            elif len(args) > 1 and args[1].lower() in ("town", "ve", "thanh", "nha"):
+                client.set_auto_revive_mode("town")
+            client.auto_revive_manager.enable()
+            st = client.get_auto_revive_status()
+            logger.system(f"Đã BẬT Tự Động Hồi Sinh (Chế độ: {st['mode_str']})!", account_tag=tag)
+        elif sub in ("off", "stop", "0", "false", "tat"):
+            client.auto_revive_manager.disable()
+            logger.system("Đã TẮT Tự Động Hồi Sinh!", account_tag=tag)
+        elif sub in ("status", "st", "info"):
+            st = client.get_auto_revive_status()
+            print(f"\n=== TRẠNG THÁI TỰ ĐỘNG HỒI SINH [{tag}] ===")
+            print(f"- Hoạt động:             {'ĐANG BẬT [ON]' if st['is_enabled'] else 'ĐÃ TẮT [OFF]'}")
+            print(f"- Chế độ:                {st['mode_str']}")
+            print(f"- Đã hồi sinh:           {st['revive_count']} lần")
+            print(f"- Trạng thái nhân vật:   {'ĐÃ CHẾT' if st['is_currently_dead'] else 'CÒN SỐNG'}\n")
+        elif sub in ("auto", "tudong"):
+            client.toggle_auto_revive()
+        elif sub in ("gem", "ngoc") and len(args) > 1 and args[1].lower() in ("on", "1"):
+            client.set_auto_revive_mode("gem")
+            client.auto_revive_manager.enable()
+            logger.system("Đã BẬT Tự Động Hồi Sinh (Ngọc tại chỗ)!", account_tag=tag)
+        elif sub in ("ve", "town") and len(args) > 1 and args[1].lower() in ("on", "1"):
+            client.set_auto_revive_mode("town")
+            client.auto_revive_manager.enable()
+            logger.system("Đã BẬT Tự Động Hồi Sinh (Về thành)!", account_tag=tag)
+        else:
+            at_place = False
+            if sub in ("ngoc", "gem", "place", "here", "1"):
+                at_place = True
+            ok, msg = client.revive(at_place=at_place)
+            logger.system(f"Hồi sinh: {msg}", account_tag=tag)
 
     elif cmd in ("autohs", "autors", "auto_revive"):
         if not args:
             client.toggle_auto_revive()
-        elif args[0].lower() in ("on", "start", "1", "true"):
+        elif args[0].lower() in ("on", "start", "1", "true", "bat"):
+            if len(args) > 1 and args[1].lower() in ("gem", "ngoc"):
+                client.set_auto_revive_mode("gem")
+            elif len(args) > 1 and args[1].lower() in ("town", "ve", "thanh", "nha"):
+                client.set_auto_revive_mode("town")
             client.auto_revive_manager.enable()
-        elif args[0].lower() in ("off", "stop", "0", "false"):
+            st = client.get_auto_revive_status()
+            logger.system(f"Đã BẬT Tự Động Hồi Sinh (Chế độ: {st['mode_str']})!", account_tag=tag)
+        elif args[0].lower() in ("off", "stop", "0", "false", "tat"):
             client.auto_revive_manager.disable()
+            logger.system("Đã TẮT Tự Động Hồi Sinh!", account_tag=tag)
         elif args[0].lower() in ("gem", "ngoc", "place", "here"):
             client.set_auto_revive_mode("gem")
+            client.auto_revive_manager.enable()
+            logger.system("Đã chuyển chế độ: Hồi sinh bằng Ngọc tại chỗ (cmd -16) và BẬT AutoHS!", account_tag=tag)
         elif args[0].lower() in ("town", "ve", "thanh", "nha"):
             client.set_auto_revive_mode("town")
+            client.auto_revive_manager.enable()
+            logger.system("Đã chuyển chế độ: Hồi sinh về Thành / Nhà (cmd -15) và BẬT AutoHS!", account_tag=tag)
         elif args[0].lower() in ("status", "st", "info"):
             st = client.get_auto_revive_status()
             print(f"\n=== TRẠNG THÁI TỰ ĐỘNG HỒI SINH [{tag}] ===")
@@ -285,6 +332,31 @@ def execute_client_command(client: ClientNRO, line: str) -> bool:
             print(f"- Trạng thái nhân vật:   {'ĐÃ CHẾT' if st['is_currently_dead'] else 'CÒN SỐNG'}\n")
         else:
             print("Cú pháp: autohs [on|off|ngoc|ve|status]")
+
+    elif cmd in ("auto", "tudong"):
+        if not args:
+            print("Cú pháp: auto <tính năng> (Ví dụ: auto hs on, auto ak on, auto ts on, auto hunt on)")
+        else:
+            sub_task = args[0].lower()
+            sub_rest = args[1:]
+            if sub_task in ("hs", "autohs", "hoisinh", "revive"):
+                return execute_client_command(client, "autohs " + " ".join(sub_rest))
+            elif sub_task in ("ak",):
+                return execute_client_command(client, "ak " + " ".join(sub_rest))
+            elif sub_task in ("ts", "tansat"):
+                return execute_client_command(client, "ts " + " ".join(sub_rest))
+            elif sub_task in ("hunt", "boss"):
+                return execute_client_command(client, "hunt " + " ".join(sub_rest))
+            elif sub_task in ("pet", "detu", "upde", "trainpet"):
+                return execute_client_command(client, "trainpet " + " ".join(sub_rest))
+            elif sub_task in ("acc", "newacc", "trainacc"):
+                return execute_client_command(client, "trainacc " + " ".join(sub_rest))
+            elif sub_task in ("nhat", "pick", "anhat"):
+                return execute_client_command(client, "anhat " + " ".join(sub_rest))
+            elif sub_task in ("nvbm", "bomong", "quest"):
+                return execute_client_command(client, "nvbm " + " ".join(sub_rest))
+            else:
+                print(f"Chưa hỗ trợ tính năng 'auto {sub_task}'. Gõ 'help' để xem danh sách lệnh.")
 
     elif cmd == "useitem":
         if not args or args[0].lower() in ("status", "st", "info"):
@@ -930,6 +1002,7 @@ def execute_multi_command(
                 sub_cmd = " ".join(args[1:])
                 if inst.client and inst.client.isConnected():
                     execute_client_command(inst.client, sub_cmd)
+                    inst.snapshot_active_autos()
                 else:
                     print(f"[!] Tài khoản {inst.tag} hiện chưa kết nối! Gõ 'acc start {inst.config.acc_id}' để khởi động.")
             else:
@@ -1086,10 +1159,29 @@ def execute_multi_command(
             print("[!] Hiện không có tài khoản nào đang Online để thực thi lệnh.")
             return True, active_target
 
+        is_zone_min = (
+            sub_cmd.strip().lower() in ("zone min", "zone least", "zone itnguoi", "zone vang", "zone auto", "zone empty")
+            or (len(args) >= 2 and args[0].lower() in ("zone", "zon", "zn", "khu") and args[1].lower() in ("min", "least", "itnguoi", "vang", "auto", "empty"))
+        )
+        if is_zone_min:
+            print(f"[*] Đang phân tán khu vắng cho {len(connected_accs)} tài khoản (tản đều không đụng nhau)...")
+            results = account_manager.disperse_zones_min(connected_accs)
+            for r in results:
+                a = r["account"]
+                f_z = r["from_zone"]
+                t_z = r["to_zone"]
+                m_name = r.get("map_name", "")
+                if r["stayed"]:
+                    print(f"  - [{a.tag}]: Đang ở Khu {t_z:02d} ({m_name}) - đã là khu ít người nhất, giữ nguyên.")
+                else:
+                    print(f"  - [{a.tag}]: Chuyển từ Khu {f_z:02d} -> Khu {t_z:02d} ({m_name}) - tản vào khu vắng.")
+            return True, active_target
+
         print(f"[*] Đang phát lệnh '{sub_cmd}' tới {len(connected_accs)} tài khoản...")
         for a in connected_accs:
             try:
                 execute_client_command(a.client, sub_cmd)
+                a.snapshot_active_autos()
             except Exception as ex:
                 logger.error(f"Lỗi khi thực thi lệnh '{sub_cmd}': {ex}", account_tag=a.tag)
         return True, active_target
@@ -1099,6 +1191,7 @@ def execute_multi_command(
         inst = account_manager.get_account(active_target)
         if inst and inst.client and inst.client.isConnected():
             execute_client_command(inst.client, line)
+            inst.snapshot_active_autos()
             return True, active_target
         elif inst:
             print(f"[!] Tài khoản {inst.tag} chưa kết nối online.")
@@ -1108,9 +1201,29 @@ def execute_multi_command(
     # Tự động gửi tới tất cả các tài khoản online
     connected_accs = [a for a in account_manager.accounts if a.client and a.client.isConnected()]
     if connected_accs:
+        is_zone_min = (
+            cmd in ("zone", "zon", "zn", "khu")
+            and args
+            and args[0].lower() in ("min", "least", "itnguoi", "vang", "auto", "empty")
+        )
+        if is_zone_min:
+            print(f"[*] Đang phân tán khu vắng cho {len(connected_accs)} tài khoản (tản đều không đụng nhau)...")
+            results = account_manager.disperse_zones_min(connected_accs)
+            for r in results:
+                a = r["account"]
+                f_z = r["from_zone"]
+                t_z = r["to_zone"]
+                m_name = r.get("map_name", "")
+                if r["stayed"]:
+                    print(f"  - [{a.tag}]: Đang ở Khu {t_z:02d} ({m_name}) - đã là khu ít người nhất, giữ nguyên.")
+                else:
+                    print(f"  - [{a.tag}]: Chuyển từ Khu {f_z:02d} -> Khu {t_z:02d} ({m_name}) - tản vào khu vắng.")
+            return True, active_target
+
         for a in connected_accs:
             try:
                 execute_client_command(a.client, line)
+                a.snapshot_active_autos()
             except Exception as ex:
                 logger.error(f"Lỗi khi thực thi '{line}': {ex}", account_tag=a.tag)
         return True, active_target

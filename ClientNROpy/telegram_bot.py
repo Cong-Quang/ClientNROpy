@@ -37,6 +37,7 @@ from .game_data import (
     ITEM_TYPE_NAMES,
     GENDER_NAMES,
     format_big_number,
+    format_compact_number,
     get_item_display_name,
     get_skill_display_name,
     get_item_name,
@@ -72,8 +73,13 @@ class TelegramAIBot:
         self.allowed_chat_ids: Set[Union[int, str]] = set(allowed_chat_ids or [])
         self.active_chat_ids: Set[Union[int, str]] = set(allowed_chat_ids or [])
 
-        # Ngữ cảnh tài khoản đang chọn điều khiển cho từng người chat (None = ALL)
+        # Ngữ cảnh tài khoản đang chọn điều khiển cho từng người chat.
+        # None = tất cả tài khoản.
         self.selected_targets: Dict[Union[int, str], Optional[int]] = {}
+
+        # Trạng thái giao diện nút bấm theo từng người chat.
+        # Mục đích: tách màn hình chọn tài khoản khỏi màn hình điều khiển.
+        self._menu_modes: Dict[Union[int, str], str] = {}
 
         # Bộ lọc chống trùng lặp thông báo Boss giữa nhiều tài khoản
         self._recent_boss_events: Dict[str, float] = {}
@@ -115,58 +121,284 @@ class TelegramAIBot:
     # Bàn phím nút bấm tùy chỉnh (ReplyKeyboardMarkup)
     # --------------------------------------------------------------------------
     def get_main_keyboard(self, chat_id: Optional[Union[int, str]] = None) -> Dict[str, Any]:
-        """Bàn phím gọn: chọn acc (kèm trạng thái ON/OFF) + vài lệnh nhanh."""
+        """Tạo bàn phím điều khiển theo từng màn hình, ưu tiên thao tác bằng tiếng Việt."""
+        mode = self._menu_modes.get(chat_id, "main") if chat_id else "main"
         selected = self.selected_targets.get(chat_id) if chat_id else None
 
-        # Hàng 1: ngữ cảnh ALL (dấu [>] = đang chọn)
-        all_marker = "[>]" if selected is None else "[ ]"
-        keyboard = [[{"text": f"{all_marker} Tất cả [ALL]"}]]
+        def menu(rows: List[List[str]]) -> Dict[str, Any]:
+            return {
+                "keyboard": [[{"text": text} for text in row] for row in rows],
+                "resize_keyboard": True,
+                "is_persistent": True,
+                "one_time_keyboard": False,
+            }
 
-        # Các hàng chọn acc: mỗi hàng 2 nút, hiển thị [ON]/[OFF] + tên
-        if self.account_manager and self.account_manager.accounts:
-            row = []
-            for a in self.account_manager.accounts:
-                cname = a.char_name if a.char_name != "Chưa vào" else a.config.username
-                online = bool(a.client and a.client.isConnected())
-                state = "[ON]" if online else "[OFF]"
-                is_sel = (selected == a.config.acc_id or selected == str(a.config.acc_id))
-                prefix = "> " if is_sel else ""
-                row.append({"text": f"{prefix}{state} Acc #{a.config.acc_id}: {cname}"})
-                if len(row) == 2:
-                    keyboard.append(row)
-                    row = []
-            if row:
-                keyboard.append(row)
+        if mode == "accounts":
+            rows: List[List[str]] = [["Tất cả tài khoản"]]
+            acc_row: List[str] = []
+            if self.account_manager and self.account_manager.accounts:
+                for a in self.account_manager.accounts:
+                    cname = a.char_name if a.char_name != "Chưa vào" else a.config.username
+                    online = bool(a.client and a.client.isConnected())
+                    state = "Đang online" if online else "Ngoại tuyến"
+                    label = f"Tài khoản {a.config.acc_id}: {state}"
+                    if cname:
+                        label += f" - {cname[:24]}"
+                    acc_row.append(label)
+                    if len(acc_row) == 2:
+                        rows.append(acc_row)
+                        acc_row = []
+                if acc_row:
+                    rows.append(acc_row)
+            rows.extend([
+                ["Đăng nhập tất cả", "Đăng xuất tất cả"],
+                ["Quay lại"],
+            ])
+            return menu(rows)
 
-        # Hàng 3: Tra cứu & Bản đồ
-        keyboard.append([
-            {"text": "/status"},
-            {"text": "/info"},
-            {"text": "/map"},
-            {"text": "/zone"},
+        if mode == "info":
+            return menu([
+                ["Tổng quan", "Thông tin chi tiết"],
+                ["Balo", "Rương đồ"],
+                ["Đệ tử", "Bản đồ"],
+                ["Khu vực", "Chiến đấu"],
+                ["Cây đậu", "Quay lại"],
+            ])
+
+        if mode == "control":
+            return menu([
+                ["Bật tàn sát", "Tắt tàn sát"],
+                ["Bật tự đánh", "Tắt tự đánh"],
+                ["Bật săn Boss", "Tắt săn Boss"],
+                ["Bật tự nhặt đồ", "Tắt tự nhặt đồ"],
+                ["Bật tự hồi sinh", "Tắt tự hồi sinh"],
+                ["Thu hoạch đậu", "Đăng nhập"],
+                ["Đăng xuất", "Quay lại"],
+            ])
+
+        if mode == "boss":
+            return menu([
+                ["Xem Boss hiện tại", "Bật săn Boss"],
+                ["Tắt săn Boss", "Đi tới Boss"],
+                ["Quay lại"],
+            ])
+
+        if mode == "help":
+            return menu([
+                ["Tài khoản", "Trạng thái"],
+                ["Điều khiển", "Thông tin"],
+                ["Săn Boss", "Trợ lý AI"],
+                ["Hướng dẫn", "Về menu chính"],
+            ])
+
+        # Màn hình chính chỉ chứa nhóm chức năng, không nhồi toàn bộ lệnh vào một chỗ.
+        target_name = "Tất cả tài khoản" if selected is None else f"Tài khoản {selected}"
+        return menu([
+            ["Tài khoản", "Trạng thái"],
+            ["Điều khiển", "Thông tin"],
+            ["Săn Boss", "Đăng nhập"],
+            ["Trợ lý AI", "Hướng dẫn"],
+            [target_name],
         ])
 
-        # Hàng 4: Di chuyển & Train cơ bản
-        keyboard.append([
-            {"text": "/goto"},
-            {"text": "/ts on"},
-            {"text": "/ts off"},
-            {"text": "/harvest"},
-        ])
+    def _set_menu_mode(self, chat_id: Union[int, str], mode: str, send_menu: bool = True) -> None:
+        """Chuyển màn hình điều khiển và cập nhật bàn phím Telegram."""
+        self._menu_modes[chat_id] = mode
+        if send_menu:
+            title_map = {
+                "main": "Menu chính",
+                "accounts": "Chọn tài khoản",
+                "info": "Thông tin",
+                "control": "Điều khiển",
+                "boss": "Săn Boss",
+                "help": "Hướng dẫn",
+            }
+            title = title_map.get(mode, "Menu chính")
+            selected = self.selected_targets.get(chat_id)
+            target = "Tất cả tài khoản" if selected is None else f"Tài khoản {selected}"
+            self.send_message(
+                chat_id,
+                f"*{title}*\nPhạm vi hiện tại: *{target}*",
+                reply_markup=self.get_main_keyboard(chat_id),
+            )
 
-        # Hàng 5: Săn Boss & Đăng nhập tài khoản
-        keyboard.append([
-            {"text": "/hunt on"},
-            {"text": "/hunt off"},
-            {"text": "/login"},
-            {"text": "/logout"},
-        ])
+    def _handle_menu_button(self, chat_id: Union[int, str], text: str) -> bool:
+        """Xử lý các nút giao diện tiếng Việt; trả về True nếu đã xử lý."""
+        raw = (text or "").strip()
+        lower = raw.lower()
+        mode = self._menu_modes.get(chat_id, "main")
 
-        return {
-            "keyboard": keyboard,
-            "resize_keyboard": True,
-            "is_persistent": True,
+        # Nút chung.
+        if lower in ("quay lại", "về menu chính", "menu chính"):
+            self._set_menu_mode(chat_id, "main", send_menu=True)
+            return True
+
+        if lower == "tài khoản":
+            self._set_menu_mode(chat_id, "accounts", send_menu=True)
+            return True
+
+        if lower == "trạng thái":
+            self._send_status_message(chat_id)
+            self._set_menu_mode(chat_id, "main", send_menu=False)
+            self.send_message(chat_id, "Bạn có thể tiếp tục chọn chức năng bên dưới.", reply_markup=self.get_main_keyboard(chat_id))
+            return True
+
+        if lower == "điều khiển":
+            self._set_menu_mode(chat_id, "control", send_menu=True)
+            return True
+
+        if lower == "thông tin":
+            self._set_menu_mode(chat_id, "info", send_menu=True)
+            return True
+
+        if lower == "săn boss":
+            self._set_menu_mode(chat_id, "boss", send_menu=True)
+            return True
+
+        if lower == "trợ lý ai":
+            self.send_message(
+                chat_id,
+                "Nhập yêu cầu bằng tiếng Việt tự nhiên. Ví dụ:\n"
+                "`Cho tài khoản 1 tới map 112, vào khu vắng và bật tàn sát`.\n\n"
+                "Bạn cũng có thể dùng `/ai <nội dung>`.",
+                reply_markup=self.get_main_keyboard(chat_id),
+            )
+            return True
+
+        if lower in ("hướng dẫn",):
+            self._send_help_message(chat_id)
+            self._set_menu_mode(chat_id, "main", send_menu=False)
+            self.send_message(chat_id, "Bạn có thể tiếp tục chọn chức năng bên dưới.", reply_markup=self.get_main_keyboard(chat_id))
+            return True
+
+        if lower in ("về menu chính",):
+            self._set_menu_mode(chat_id, "main", send_menu=True)
+            return True
+
+        # Nút chọn tài khoản.
+        if lower == "tất cả tài khoản" and mode == "accounts":
+            self.selected_targets[chat_id] = None
+            self._set_menu_mode(chat_id, "main", send_menu=False)
+            self.send_message(chat_id, "Đã chọn phạm vi: *Tất cả tài khoản*.", reply_markup=self.get_main_keyboard(chat_id))
+            return True
+
+        m = re.match(r"^tài khoản\s+(\d+):", raw, re.IGNORECASE)
+        if m and mode == "accounts":
+            acc_id = int(m.group(1))
+            inst = self.account_manager.get_account(str(acc_id)) if self.account_manager else None
+            if not inst:
+                self.send_message(chat_id, f"Không tìm thấy tài khoản {acc_id}.", reply_markup=self.get_main_keyboard(chat_id))
+                return True
+            self.selected_targets[chat_id] = acc_id
+            cname = inst.char_name if inst.char_name != "Chưa vào" else inst.config.username
+            online = bool(inst.client and inst.client.isConnected())
+            state = "Đang online" if online else "Ngoại tuyến"
+            self._set_menu_mode(chat_id, "main", send_menu=False)
+            self.send_message(
+                chat_id,
+                f"Đã chọn *Tài khoản {acc_id}*.\n"
+                f"Nhân vật: *{cname}*\n"
+                f"Trạng thái: *{state}*\n\n"
+                "Các lệnh từ menu tiếp theo sẽ áp dụng cho tài khoản này.",
+                reply_markup=self.get_main_keyboard(chat_id),
+            )
+            return True
+
+        # Menu thông tin: Sử dụng trực tiếp các hàm định dạng Telegram đẹp mắt, hỗ trợ tất cả tài khoản
+        if mode == "info":
+            curr_target = str(self.selected_targets.get(chat_id)) if self.selected_targets.get(chat_id) else None
+            if lower == "tổng quan":
+                self._send_status_message(chat_id)
+                return True
+            if lower == "thông tin chi tiết":
+                self._send_info_message(chat_id, curr_target)
+                return True
+            if lower == "balo":
+                self._send_bag_message(chat_id, curr_target)
+                return True
+            if lower == "rương đồ":
+                self._send_box_message(chat_id, curr_target)
+                return True
+            if lower == "đệ tử":
+                self._send_pet_message(chat_id, curr_target)
+                return True
+            if lower == "bản đồ":
+                self._send_map_message(chat_id, curr_target)
+                return True
+            if lower == "khu vực":
+                self._send_zone_message(chat_id, curr_target)
+                return True
+            if lower == "chiến đấu":
+                self._send_combat_message(chat_id, curr_target)
+                return True
+            if lower == "cây đậu":
+                self._send_tree_message(chat_id, curr_target)
+                return True
+
+        # Menu điều khiển.
+        control_commands = {
+            "bật tàn sát": "ts on",
+            "tắt tàn sát": "ts off",
+            "bật tự đánh": "ak on",
+            "tắt tự đánh": "ak off",
+            "bật săn boss": "hunt on",
+            "tắt săn boss": "hunt off",
+            "bật tự nhặt đồ": "anhat on",
+            "tắt tự nhặt đồ": "anhat off",
+            "bật tự hồi sinh": "autohs on",
+            "tắt tự hồi sinh": "autohs off",
+            "thu hoạch đậu": "harvest",
         }
+        if mode == "control" and lower in control_commands:
+            self._execute_ui_command(chat_id, control_commands[lower])
+            return True
+
+        # Menu Boss dùng lệnh cũ để không ảnh hưởng backend.
+        if mode == "boss":
+            if lower == "xem boss hiện tại":
+                self._send_boss_message(chat_id, str(self.selected_targets[chat_id]) if self.selected_targets.get(chat_id) else None, [])
+                return True
+            if lower == "bật săn boss":
+                self._execute_ui_command(chat_id, "hunt on")
+                return True
+            if lower == "tắt săn boss":
+                self._execute_ui_command(chat_id, "hunt off")
+                return True
+            if lower == "đi tới boss":
+                self.send_message(chat_id, "Nhập tên Boss theo cú pháp: `/boss go <tên boss>`", reply_markup=self.get_main_keyboard(chat_id))
+                return True
+
+        # Đăng nhập / đăng xuất từ menu hoặc nút bấm bất kỳ chế độ nào.
+        if lower in ("đăng nhập tất cả", "dang nhap tat ca", "login all"):
+            self._handle_login_cmd(chat_id, "all")
+            return True
+        if lower in ("đăng xuất tất cả", "dang xuat tat ca", "logout all"):
+            self._handle_logout_cmd(chat_id, "all")
+            return True
+
+        if lower in ("đăng nhập", "dang nhap") and mode in ("main", "control", "accounts"):
+            self._handle_login_cmd(chat_id)
+            return True
+        if lower in ("đăng xuất", "dang xuat") and mode in ("main", "control", "accounts"):
+            self._handle_logout_cmd(chat_id)
+            return True
+
+        # Nút tài khoản hiện tại ở menu chính.
+        selected = self.selected_targets.get(chat_id)
+        if selected is None and lower == "tất cả tài khoản":
+            self._set_menu_mode(chat_id, "accounts", send_menu=True)
+            return True
+        if selected is not None and lower == f"tài khoản {selected}":
+            self._set_menu_mode(chat_id, "accounts", send_menu=True)
+            return True
+
+        return False
+
+    def _execute_ui_command(self, chat_id: Union[int, str], command: str) -> None:
+        """Thực thi một lệnh từ giao diện nút bấm và đưa người dùng về menu phù hợp."""
+        self._execute_direct_command(chat_id, command)
+        self._set_menu_mode(chat_id, "main", send_menu=False)
+        self.send_message(chat_id, "Bạn có thể tiếp tục thao tác bằng menu bên dưới.", reply_markup=self.get_main_keyboard(chat_id))
 
     # --------------------------------------------------------------------------
     # Các hàm gọi Telegram HTTP API thuần urllib
@@ -276,7 +508,7 @@ class TelegramAIBot:
 
         # Tình trạng sinh tử
         is_dead = (char.statusMe == 14) or (char.cHP <= 0 and char.cHPFull > 0)
-        alive_str = "[x] ĐÃ CHẾT" if is_dead else "[=] CÒN SỐNG"
+        alive_str = "[!] ĐÃ CHẾT" if is_dead else "[=] CÒN SỐNG"
 
         hp_pct = round((char.cHP / max(1, char.cHPFull)) * 100, 1)
         mp_pct = round((char.cMP / max(1, char.cMPFull)) * 100, 1)
@@ -288,7 +520,27 @@ class TelegramAIBot:
         map_planet = planet_names.get(char.mapInfo.planetID, "Không rõ") if char.mapInfo else "Không rõ"
 
         # Nhiệm vụ
-        task_str = getattr(char, "task_name", "") or f"Nhiệm vụ Task ID: {char.ctaskId}"
+        task = getattr(char, "task", None)
+        task_name = ""
+        task_prog = ""
+        if task:
+            task_name = getattr(task, "clean_name", "")
+            task_prog = getattr(task, "progress_str", "")
+        if not task_name:
+            raw_task = getattr(char, "task_name", "")
+            from .task import clean_task_name
+            task_name = clean_task_name(raw_task) if raw_task else ""
+        if not task_name and getattr(char, "ctaskId", 0):
+            task_name = f"Task ID {char.ctaskId}"
+
+        if task_name and task_prog:
+            task_display = f"*{task_name}* | Tiến độ: *{task_prog}*"
+        elif task_name:
+            task_display = f"*{task_name}*"
+        elif task_prog:
+            task_display = f"*{task_prog}*"
+        else:
+            task_display = "*Chưa có*"
 
         # Kỹ năng
         skills_str = ", ".join([get_skill_display_name(sk) for sk in char.skills]) if char.skills else "Chưa có kỹ năng đặc biệt"
@@ -301,19 +553,19 @@ class TelegramAIBot:
             f"> Hành tinh:       *{gender_str}* | Lớp: `{class_str}`",
             f"> Trạng thái:      *{alive_str}* | Kết nối: *{inst.status}*",
             f"> = *TÀI SẢN TIỀN TỆ:*",
-            f"  > Vàng (Xu):       *{char.xu:,}* ({format_big_number(char.xu)} Xu)",
-            f"  > Ngọc xanh:       *{char.luong:,}* ({format_big_number(char.luong)} Ngọc)" if char.luong >= 1000 else f"  > Ngọc xanh:       *{char.luong:,}* Ngọc",
-            f"  > Hồng ngọc:       *{char.luongKhoa:,}* ({format_big_number(char.luongKhoa)} Ngọc)" if char.luongKhoa >= 1000 else f"  > Hồng ngọc:       *{char.luongKhoa:,}* Ngọc khóa",
+            f"  > Vàng (Xu):       *{format_compact_number(char.xu)} Xu*",
+            f"  > Ngọc xanh:       *{format_compact_number(char.luong)} Ngọc*",
+            f"  > Hồng ngọc:       *{format_compact_number(char.luongKhoa)} Ngọc khóa*",
             f"> = *CHỈ SỐ CHIẾN ĐẤU:*",
-            f"  > HP (Máu):        *{char.cHP:,} / {char.cHPFull:,}* ({hp_pct}%)",
-            f"  > KI / MP (Nội lực): *{char.cMP:,} / {char.cMPFull:,}* ({mp_pct}%)",
-            f"  > Sức mạnh:        *{char.cPower:,}* ({format_big_number(char.cPower)})",
-            f"  > Tiềm năng:       *{char.cTiemNang:,}* ({format_big_number(char.cTiemNang)})",
-            f"  > Sức đánh (Dam):  *{char.cDamFull:,}* (Gốc: `{char.cDamGoc:,}`)",
-            f"  > Giáp (Def):      *{char.cDefull:,}* (Gốc: `{char.cDefGoc:,}`)",
+            f"  > HP (Máu):        *{format_compact_number(char.cHP)} / {format_compact_number(char.cHPFull)}* ({hp_pct}%)",
+            f"  > KI / MP (Nội lực): *{format_compact_number(char.cMP)} / {format_compact_number(char.cMPFull)}* ({mp_pct}%)",
+            f"  > Sức mạnh:        *{format_compact_number(char.cPower)}*",
+            f"  > Tiềm năng:       *{format_compact_number(char.cTiemNang)}*",
+            f"  > Sức đánh (Dam):  *{format_compact_number(char.cDamFull)}* (Gốc: `{format_compact_number(char.cDamGoc)}`)",
+            f"  > Giáp (Def):      *{format_compact_number(char.cDefull)}* (Gốc: `{format_compact_number(char.cDefGoc)}`)",
             f"  > Chí mạng (Crit): *{char.cCriticalFull}%* (Gốc: `{char.cCriticalGoc}%`)",
             f"  > Tốc độ chạy:     *{char.cspeed}*",
-            f"> Nhiệm vụ:        *{task_str}*",
+            f"> Nhiệm vụ:        {task_display}",
             f"> Chiêu thức ({len(char.skills)}): `{skills_str}`",
         ]
 
@@ -328,11 +580,11 @@ class TelegramAIBot:
             pet_skills = ", ".join([get_skill_display_name(sk) for sk in pet.arrPetSkill]) if pet.arrPetSkill else "Chưa mở kỹ năng"
 
             lines.append(f"> Tên đệ tử:       *{p_name}* (Trạng thái: *{pet.statusName}*)")
-            lines.append(f"> HP (Máu đệ):     *{pet.cHP:,} / {pet.cHPFull:,}* ({pet_hp_pct}%)")
-            lines.append(f"> KI / MP:         *{pet.cMP:,} / {pet.cMPFull:,}* ({pet_mp_pct}%)")
-            lines.append(f"> Sức đánh:        *{pet.cDamFull:,}* | Giáp: *{pet.cDefull:,}* | Chí mạng: *{pet.cCriticalFull}%*")
-            lines.append(f"> Sức mạnh:        *{pet.cPower:,}* ({format_big_number(pet.cPower)}) | Tiềm năng: *{format_big_number(pet.cTiemNang)}*")
-            lines.append(f"> Thể lực:         *{pet.cStamina} / {pet.cMaxStamina}* ({pet_sta_pct}%)")
+            lines.append(f"> HP (Máu đệ):     *{format_compact_number(pet.cHP)} / {format_compact_number(pet.cHPFull)}* ({pet_hp_pct}%)")
+            lines.append(f"> KI / MP:         *{format_compact_number(pet.cMP)} / {format_compact_number(pet.cMPFull)}* ({pet_mp_pct}%)")
+            lines.append(f"> Sức đánh:        *{format_compact_number(pet.cDamFull)}* | Giáp: *{format_compact_number(pet.cDefull)}* | Chí mạng: *{pet.cCriticalFull}%*")
+            lines.append(f"> Sức mạnh:        *{format_compact_number(pet.cPower)}* | Tiềm năng: *{format_compact_number(pet.cTiemNang)}*")
+            lines.append(f"> Thể lực:         *{format_compact_number(pet.cStamina)} / {format_compact_number(pet.cMaxStamina)}* ({pet_sta_pct}%)")
             lines.append(f"> Kỹ năng đệ:      `{pet_skills}`")
             lines.append(f"> Trang bị đệ:     *{len(pet.arrItemBody)}* món trang bị")
         else:
@@ -381,9 +633,9 @@ class TelegramAIBot:
             state_names = {
                 "IDLE": "[=] Đang chờ thông báo Boss mới" if is_hunting else "[ ] Đã dừng săn",
                 "MOVING": "[>] Đang di chuyển tới map Boss",
-                "SEARCHING": "[>] Đang tìm kiếm & quét khu vực",
-                "COMBAT": "[>] Đang chiến đấu tiêu diệt Boss",
-                "LOOTING": "[>] Đang nhặt đồ rơi",
+                "SEARCHING": "[*] Đang tìm kiếm & quét khu vực",
+                "COMBAT": "[!] Đang chiến đấu tiêu diệt Boss",
+                "LOOTING": "[+] Đang nhặt đồ rơi",
             }
             curr_state = getattr(bh, "bh_state", "IDLE")
             state_desc = state_names.get(curr_state, curr_state)
@@ -413,14 +665,14 @@ class TelegramAIBot:
             if b_history:
                 lines.append(f"> Boss hạ gần đây:")
                 for h in b_history[-3:]:
-                    lines.append(f"  • *{h['name']}* tại {h.get('map_name', '')} ({h.get('time', '')})")
+                    lines.append(f"  *{h['name']}* tại {h.get('map_name', '')} ({h.get('time', '')})")
 
             # Chiến lợi phẩm nhặt từ Boss gần nhất
             looted_items = getattr(bh, "boss_looted_items_history", [])
             if looted_items:
                 lines.append(f"> Đồ nhặt từ Boss gần đây:")
                 for it in looted_items[-3:]:
-                    lines.append(f"  • {it.get('time', '')}: *{it.get('item_name', '')}* ({it.get('boss_name', '')})")
+                    lines.append(f"  {it.get('time', '')}: *{it.get('item_name', '')}* ({it.get('boss_name', '')})")
 
         # 6. Cấu hình Auto & Hệ thống
         lines.append(f"\n= *6. CẤU HÌNH AUTO & HỆ THỐNG:*")
@@ -506,14 +758,14 @@ class TelegramAIBot:
             f"=============================",
             f"> Tên đệ tử:       *{pet.cName}*",
             f"> Trạng thái:      *{pet.statusName}* (Code: `{pet.petStatus}`)",
-            f"> HP (Máu):        *{pet.cHP:,} / {pet.cHPFull:,}* ({pet_hp_pct}%)",
-            f"> KI / MP:         *{pet.cMP:,} / {pet.cMPFull:,}* ({pet_mp_pct}%)",
-            f"> Sức đánh:        *{pet.cDamFull:,}*",
-            f"> Giáp:            *{pet.cDefull:,}*",
+            f"> HP (Máu):        *{format_compact_number(pet.cHP)} / {format_compact_number(pet.cHPFull)}* ({pet_hp_pct}%)",
+            f"> KI / MP:         *{format_compact_number(pet.cMP)} / {format_compact_number(pet.cMPFull)}* ({pet_mp_pct}%)",
+            f"> Sức đánh:        *{format_compact_number(pet.cDamFull)}*",
+            f"> Giáp:            *{format_compact_number(pet.cDefull)}*",
             f"> Chí mạng:        *{pet.cCriticalFull}%*",
-            f"> Sức mạnh:        *{pet.cPower:,}* ({format_big_number(pet.cPower)})",
-            f"> Tiềm năng:       *{pet.cTiemNang:,}* ({format_big_number(pet.cTiemNang)})",
-            f"> Thể lực:         *{pet.cStamina} / {pet.cMaxStamina}* ({pet_sta_pct}%)",
+            f"> Sức mạnh:        *{format_compact_number(pet.cPower)}*",
+            f"> Tiềm năng:       *{format_compact_number(pet.cTiemNang)}*",
+            f"> Thể lực:         *{format_compact_number(pet.cStamina)} / {format_compact_number(pet.cMaxStamina)}* ({pet_sta_pct}%)",
             f"> Kỹ năng đã học:  `{pet_skills}`",
             f"> Trang bị đệ tử:  *{len(pet.arrItemBody)}* món trang bị",
         ]
@@ -718,7 +970,14 @@ class TelegramAIBot:
                 parts.append(f"Vàng: {char.xu:,} xu ({format_big_number(char.xu)} Xu)")
                 parts.append(f"Ngọc: {char.luong:,} xanh, {char.luongKhoa:,} hồng")
                 parts.append(f"Vị trí: {mz} (tọa độ X={char.cx}, Y={char.cy})")
-                task_desc = getattr(char, "task_name", "") or f"Task ID {char.ctaskId}"
+                task = getattr(char, "task", None)
+                if task:
+                    task_desc = task.full_display
+                else:
+                    raw_task = getattr(char, "task_name", "")
+                    from .task import clean_task_name
+                    c_name = clean_task_name(raw_task) if raw_task else ""
+                    task_desc = c_name or f"Task ID {char.ctaskId}"
                 parts.append(f"Nhiệm vụ: {task_desc}")
 
                 # Chi tiết balo
@@ -802,7 +1061,7 @@ class TelegramAIBot:
         # Kiểm tra danh sách allowed_chat_ids (nếu cấu hình rỗng thì cho phép tất cả)
         if self.allowed_chat_ids:
             if chat_id not in self.allowed_chat_ids and str(chat_id) not in self.allowed_chat_ids:
-                self.send_message(chat_id, "[x] Bạn không có quyền điều khiển bot này.", with_keyboard=False)
+                self.send_message(chat_id, "[!] Bạn không có quyền điều khiển bot này.", with_keyboard=False)
                 return
 
         # Đưa vào danh sách active để nhận broadcast
@@ -810,9 +1069,16 @@ class TelegramAIBot:
             self.active_chat_ids.add(chat_id)
 
         # ----------------------------------------------------------------------
-        # A. Xử lý các nút bấm chuyển ngữ cảnh tài khoản (ReplyKeyboardMarkup)
+        # A. Xử lý giao diện nút bấm tiếng Việt.
+        # Ưu tiên nút bấm trước khi phân tích cú pháp lệnh CLI.
         # ----------------------------------------------------------------------
-        # Nút "[>] Tất cả [ALL]" (chọn ngữ cảnh ALL)
+        if self._handle_menu_button(chat_id, text):
+            return
+
+        # ----------------------------------------------------------------------
+        # A2. Tương thích ngược với các nút kiểu cũ nếu còn trong client Telegram.
+        # ----------------------------------------------------------------------
+        # Nút "Đang thực hiện: Tất cả [ALL]" (chọn ngữ cảnh ALL)
         if "tất cả [all]" in text.lower() or "tất cả (all)" in text.lower():
             self.selected_targets[chat_id] = None
             self.send_message(
@@ -823,7 +1089,7 @@ class TelegramAIBot:
             )
             return
 
-        # Nút "[ON] Acc #1: tên" (chọn 1 acc, có thể kèm dấu ">" khi đang chọn)
+        # Nút "Đang bật Acc #1: tên" (chọn 1 acc, có thể kèm dấu ">" khi đang chọn)
         acc_match = re.search(r"acc\s*#(\d+)", text, re.IGNORECASE)
         if acc_match and "acc #" in text.lower():
             acc_id = int(acc_match.group(1))
@@ -837,7 +1103,7 @@ class TelegramAIBot:
 
             if not online:
                 card = (
-                    f"> *ĐÃ CHỌN TÀI KHOẢN: Acc #{acc_id} ({cname})* [OFFLINE]\n"
+                    f"> *ĐÃ CHỌN TÀI KHOẢN: Acc #{acc_id} ({cname})* Ngoại tuyến\n"
                     f"=============================\n"
                     f"[!] Tài khoản hiện đang ngắt kết nối.\n"
                     f"> Gõ `/login` để kết nối vào game ngay!"
@@ -873,19 +1139,19 @@ class TelegramAIBot:
                     auto_str = ", ".join(auto_list) if auto_list else "Không bật"
 
                     card = (
-                        f"> *ĐÃ CHỌN TÀI KHOẢN: Acc #{acc_id} ({cname})* [ONLINE]\n"
+                        f"> *ĐÃ CHỌN TÀI KHOẢN: Acc #{acc_id} ({cname})* Đang online\n"
                         f"=============================\n"
-                        f"> Nhân vật:       *{cname}* ({gender_str}) | SM: *{format_big_number(char.cPower)}*\n"
-                        f"> HP:             *{char.cHP:,} / {char.cHPFull:,}* ({hp_pct}%) | KI: *{mp_pct}%*\n"
+                        f"> Nhân vật:       *{cname}* ({gender_str}) | SM: *{format_compact_number(char.cPower)}*\n"
+                        f"> HP:             *{format_compact_number(char.cHP)} / {format_compact_number(char.cHPFull)}* ({hp_pct}%) | KI: *{format_compact_number(char.cMP)}* ({mp_pct}%)\n"
                         f"> Vị trí:         *{map_name}* (Khu {zone_id:02d}) | X: `{char.cx}`, Y: `{char.cy}`\n"
-                        f"> Tiền tệ:        *{format_big_number(char.xu)} Xu* | *{char.luong:,}* Ngọc xanh\n"
+                        f"> Tiền tệ:        *{format_compact_number(char.xu)} Xu* | *{format_compact_number(char.luong)}* Ngọc\n"
                         f"> Auto hiện tại:  *{auto_str}*\n"
                         f"=============================\n"
                         f"> *Lệnh nhanh:* `/info` > `/zone min` > `/ts on` > `/harvest` > `/item 14`"
                     )
                 else:
                     card = (
-                        f"> *ĐÃ CHỌN TÀI KHOẢN: Acc #{acc_id} ({cname})* [ONLINE]\n"
+                        f"> *ĐÃ CHỌN TÀI KHOẢN: Acc #{acc_id} ({cname})* Đang online\n"
                         f"=============================\n"
                         f"> Đang đồng bộ dữ liệu nhân vật...\n"
                         f"> *Lệnh nhanh:* `/info` > `/status` > `/map`"
@@ -991,8 +1257,11 @@ class TelegramAIBot:
             if sub_cmd in ("item", "timitem", "checkitem"):
                 self._send_item_search_message(chat_id, " ".join(sub_sub_args), target_acc_id)
                 return
-            if sub_cmd in ("zone",):
+            if sub_cmd in ("zone", "khu"):
                 self._send_zone_message(chat_id, target_acc_id, sub_sub_args)
+                return
+            if sub_cmd in ("autohs", "hs", "autors", "hoisinh", "revive"):
+                self._send_autohs_message(chat_id, target_acc_id, sub_sub_args)
                 return
             if sub_cmd in ("login", "start", "dangnhap"):
                 self._handle_login_cmd(chat_id, target_acc_id)
@@ -1043,11 +1312,16 @@ class TelegramAIBot:
             return
 
         # ----------------------------------------------------------------------
-        # E4. LỆNH /zone VÀ /boss
+        # E4. LỆNH /zone, /autohs VÀ /boss
         # ----------------------------------------------------------------------
-        if first_token in ("zone",):
+        if first_token in ("zone", "khu"):
             target_arg = str(curr_selected) if curr_selected else None
             self._send_zone_message(chat_id, target_arg, sub_args)
+            return
+
+        if first_token in ("autohs", "hs", "autors", "hoisinh", "revive"):
+            target_arg = str(curr_selected) if curr_selected else None
+            self._send_autohs_message(chat_id, target_arg, sub_args)
             return
 
         if first_token in ("boss",):
@@ -1244,90 +1518,44 @@ class TelegramAIBot:
     # Các hàm phản hồi thông điệp
     # --------------------------------------------------------------------------
     def _send_welcome_message(self, chat_id: Union[int, str]) -> None:
-        """Gửi thẻ chào mừng ấn tượng và tóm tắt trạng thái khi bắt đầu bot (/start)."""
+        """Màn hình chào mừng tập trung vào hành động người dùng cần làm ngay."""
         acc_count = len(self.account_manager.accounts) if (self.account_manager and self.account_manager.accounts) else 0
         online_count = sum(1 for a in self.account_manager.accounts if a.client and a.client.isConnected()) if acc_count > 0 else 0
-        rec_status = "BẬT" if (self.account_manager and self.account_manager.auto_reconnect) else "TẮT"
-        ai_status = f"BẬT ({self.ai_model})" if (self.ai_enabled and self.ai_api_key) else "TẮT"
+        rec_status = "Đang bật" if (self.account_manager and self.account_manager.auto_reconnect) else "Đang tắt"
+        ai_status = f"Đang bật ({self.ai_model})" if (self.ai_enabled and self.ai_api_key) else "Đang tắt"
 
+        self._menu_modes[chat_id] = "main"
         welcome_text = (
-            "= *CLIENT NRO PY - TRUNG TÂM ĐIỀU KHIỂN TELEGRAM*\n"
-            "==============================\n"
-            f"> Trạng thái:      *{online_count}/{acc_count}* tài khoản [ONLINE]\n"
-            f"> Auto-Reconnect:  *{rec_status}* | Trợ lý AI: *{ai_status}*\n"
-            "==============================\n"
-            "= *HƯỚNG DẪN 4 BƯỚC SỬ DỤNG NHANH:*\n"
-            "> `1.` *Chọn tài khoản:* Nhấn các nút `Acc #1`, `Acc #2` bên dưới hoặc `[>] Tất cả [ALL]`.\n"
-            "> `2.` *Xem thông tin:* Gõ `/status` (tổng hợp), `/info` (chi tiết 100%), `/item 14` (tìm đồ).\n"
-            "> `3.` *Tự động hóa:* Gõ `/goto <map> min ts`, `/hunt on` (săn boss), `/harvest` (thu hoạch đậu).\n"
-            "> `4.` *Trợ lý AI:* Nhắn tin tiếng Việt tự nhiên bất kỳ để AI phân tích và điều khiển game!\n"
-            "==============================\n"
-            "> Bấm chọn tài khoản bên dưới để bắt đầu hoặc gõ `/help` để xem đầy đủ mọi lệnh!"
+            "*CLIENT NRO PY*\n"
+            "Trung tâm điều khiển tài khoản qua Telegram\n\n"
+            f"Tài khoản: *{online_count}/{acc_count}* đang online\n"
+            f"Tự kết nối lại: *{rec_status}*\n"
+            f"Trợ lý AI: *{ai_status}*\n\n"
+            "Bắt đầu bằng cách chọn *Tài khoản* để xác định phạm vi điều khiển. "
+            "Sau đó dùng *Điều khiển*, *Thông tin* hoặc *Săn Boss*.\n\n"
+            "Bạn vẫn có thể dùng toàn bộ lệnh cũ, ví dụ `/status`, `/info`, `/goto 112 min ts`."
         )
         self.send_message(chat_id, welcome_text, reply_markup=self.get_main_keyboard(chat_id))
 
     def _send_help_message(self, chat_id: Union[int, str]) -> None:
         selected = self.selected_targets.get(chat_id)
-        sel_text = f"Acc #{selected}" if selected else "TOÀN BỘ TÀI KHOẢN [ALL]"
+        sel_text = "Tất cả tài khoản" if selected is None else f"Tài khoản {selected}"
 
-        help_text = (
-            "= *CLIENT NRO PY - TELEGRAM BOT*\n"
-            f"> *Ngữ cảnh đang chọn:* `{sel_text}`\n"
-            "==============================\n"
-            "> *NÚT BẤM:* bấm acc để chọn riêng, `[>] Tất cả [ALL]` để về tất cả.\n"
-            "> Lệnh `/goto`, `/ts on`... tự chạy trên acc đang chọn.\n\n"
-            "= *1. DI CHUYỂN & TREO FARM:*\n"
-            "> `/goto <map> [min|khu] [ts|ak|hunt]` : tới map + đổi khu + bật auto\n"
-            "> Vd: `/goto 112 min ts` (map 112, khu vắng nhất, bật tansat)\n"
-            "> `/xmap <id|tên>` / `/xmap stop` : di chuyển / dừng\n"
-            "> `/zone <khu>` hoặc `/zone min` : đổi khu / sang khu vắng nhất\n"
-            "> `/ts [on|off]` : tàn sát quái | `/ak [on|off]` : tự đánh\n"
-            "> `/harvest` : thu hoạch đậu thần\n\n"
-            "= *2. XEM THÔNG TIN:*\n"
-            "> `/status` : bảng trạng thái các acc + thống kê săn boss & farm đồ\n"
-            "> `/info [id|all]` : thông tin chi tiết nhân vật & đệ tử, tiến độ boss\n"
-            "> `/item <id|tên> [id|all]` : tìm kiếm vật phẩm trong balo (vd: `/item 14`, `/item đậu`)\n"
-            "> `/bag` / `/box` / `/pet` / `/map` / `/zone` / `/combat [id|all]`\n\n"
-            "= *3. SĂN BOSS & DI CHUYỂN:*\n"
-            "> `/hunt on` / `/hunt off` : bật/tắt Auto Săn Boss\n"
-            "> `/boss` / `/boss alive` : xem boss đang sống & thành tích từng acc\n"
-            "> `/zone` / `/zone min` / `/zone <khu>` : xem danh sách khu & đổi khu\n"
-            "> `/map` : xem chi tiết bản đồ và tọa độ\n"
-            "> `/nvbm [on|off]` : Auto NV Bò Mộng | `/autohs [on|off]` : tự hồi sinh\n\n"
-            "= *4. ĐĂNG NHẬP & QUẢN LÝ TÀI KHOẢN:*\n"
-            "> `/login [id|all]` : đăng nhập / kết nối lại tài khoản\n"
-            "> `/logout [id|all]` : đăng xuất an toàn (dừng auto-reconnect)\n"
-            "> `/adduser <user> <pass> [proxy]` (vd: `/adduser poopooi03 02082003`)\n"
-            "> `/deluser <user|id>` : xóa acc | `/setpass <user|id> <mk_moi>` : đổi mk\n"
-            "> `/addproxy <proxy>` / `/delproxy <stt>` / `/listproxy` : quản lý proxy\n"
-            "> `/setproxy <user|id> <proxy|off>` : gán proxy riêng cho acc\n"
-            "> (tin nhắn chứa mật khẩu sẽ tự xóa sau khi xử lý)\n\n"
-            "= *5. ĐIỀU KHIỂN & ÚP ĐỆ TỬ:*\n"
-            "> `/pet follow|protect|attack|home|fuse|porata` (hoặc `0-5`)\n"
-            "> `/trainpet [normal|avoid|kaioken|off]` : Auto Úp đệ tử thông minh\n"
-            "> `/trainacc [on|off]` : Auto làm nhiệm vụ tân thủ sơ sinh (NV 0 -> 11)\n\n"
-            "= *6. ĐA TÀI KHOẢN & HỆ THỐNG:*\n"
-            "> `/acc <id> <lệnh>` : lệnh cho 1 acc (vd: `/acc 1 goto 112 min ts`, gõ tắt `/1 goto 112 min ts`)\n"
-            "> `/all <lệnh>` : lệnh cho toàn bộ acc (vd: `/all hunt on`)\n"
-            "> `/reconnect now` : kết nối lại ngay | `/chat <nội dung>` : chat vào game\n"
-            "> `/notify <boss|login|dis> <on|off>` : bật/tắt thông báo tự động\n\n"
-            "= *7. TRỢ LÝ AI (nhắn tiếng Việt tự nhiên):*\n"
-            "> _'cho poopooi02 ra map 112 khu vắng rồi tansat'_\n"
-            "> _'hentaiz còn bao nhiêu hp?'_ | _'bật săn boss lên'_\n"
-            "> AI tự dịch thành lệnh và thực thi. Cần bật `ai.enabled` + API key trong `settings.json`."
-        )
-        self.send_message(chat_id, help_text)
+        from .display import get_telegram_help_text
+        help_text = get_telegram_help_text(sel_text)
+        self.send_message(chat_id, help_text, reply_markup=self.get_main_keyboard(chat_id))
 
     def _send_status_message(self, chat_id: Union[int, str]) -> None:
         if not self.account_manager or not self.account_manager.accounts:
-            self.send_message(chat_id, "[!] Hiện tại chưa có tài khoản nào được nạp.")
+            self.send_message(chat_id, "Hiện tại chưa có tài khoản nào được nạp.", reply_markup=self.get_main_keyboard(chat_id))
             return
 
         accs = self.account_manager.accounts
         lines = [
-            "= *BẢNG TỔNG HỢP TRẠNG THÁI TÀI KHOẢN*",
-            f"Tổng số: *{len(accs)} acc* | Auto-Reconnect: *{'BẬT' if self.account_manager.auto_reconnect else 'TẮT'}*",
-            "==============================",
+            "*TRẠNG THÁI TÀI KHOẢN*",
+            f"Tổng số: *{len(accs)}* tài khoản",
+            f"Tự kết nối lại: *{'Đang bật' if self.account_manager.auto_reconnect else 'Đang tắt'}*",
+            "",
         ]
 
         total_boss_kills = 0
@@ -1335,21 +1563,26 @@ class TelegramAIBot:
         recent_boss_kills = []
 
         for a in accs:
-            st_icon = "[ON]" if a.status == "ONLINE" else ("[~]" if a.status in ("CONNECTING", "RECONNECTING") else "[OFF]")
             cname = a.char_name if a.char_name != "Chưa vào" else a.config.username
             hp = a.hp_str
             mz = a.map_zone_str
             auto = a.auto_status_str
             status_text = a.status
-            if a.status == "RECONNECTING":
+            if a.status == "ONLINE":
+                status_text = "Đang online"
+            elif a.status == "CONNECTING":
+                status_text = "Đang kết nối"
+            elif a.status == "RECONNECTING":
                 rem = max(0, int(a.reconnect_timer_end - time.time()))
-                status_text = f"Nối lại ({rem}s)"
+                status_text = f"Đang kết nối lại, còn {rem} giây"
+            elif a.status == "OFFLINE":
+                status_text = "Ngoại tuyến"
 
-            lines.append(f"{st_icon} *Acc #{a.config.acc_id}*: `{cname}`")
-            lines.append(f"   > HP: `{hp}` | {mz}")
-            lines.append(f"   > Trạng thái: *{status_text}* | Auto: `{auto}`")
+            lines.append(f"*Tài khoản {a.config.acc_id}: {cname}*")
+            lines.append(f"Trạng thái: *{status_text}* | HP: `{hp}`")
+            lines.append(f"Vị trí: {mz}")
+            lines.append(f"Tự động hóa: {auto}")
 
-            # Bổ sung thống kê Săn Boss & Đồ farm của acc
             if a.client:
                 bh = a.client.boss_hunter
                 kills = getattr(bh, "boss_kill_count", 0)
@@ -1359,23 +1592,26 @@ class TelegramAIBot:
                 total_boss_loots += loots
 
                 if kills > 0 or loots > 0 or is_hunt:
-                    lines.append(f"   > Săn Boss: Diệt *{kills}* boss | Farm *{loots}* đồ")
+                    hunt_text = "Đang bật" if is_hunt else "Đang tắt"
+                    lines.append(f"Săn Boss: {hunt_text} | Đã hạ {kills} Boss | Nhặt {loots} vật phẩm")
 
                 hist = getattr(bh, "boss_kill_history", [])
                 for h in hist:
                     recent_boss_kills.append({**h, "acc_tag": a.tag})
 
-        lines.append("==============================")
-        # Tổng kết toàn đội
         if total_boss_kills > 0 or total_boss_loots > 0:
-            lines.append(f"> *Toàn đội Săn Boss:* Đã diệt *{total_boss_kills}* Boss | Nhặt *{total_boss_loots}* vật phẩm")
+            lines.append(f"*Tổng săn Boss:* Hạ {total_boss_kills} Boss | Nhặt {total_boss_loots} vật phẩm")
 
         if recent_boss_kills:
             last_k = recent_boss_kills[-1]
-            lines.append(f"> *Boss vừa hạ:* [{last_k['acc_tag']}] *{last_k['name']}* tại {last_k.get('map_name', '')} ({last_k.get('time', '')})")
+            lines.append(
+                f"Boss gần nhất: *{last_k['name']}* | Tài khoản {last_k['acc_tag']} | "
+                f"{last_k.get('map_name', 'Chưa rõ')} | {last_k.get('time', '')}"
+            )
 
-        lines.append("> Bấm chọn nút tài khoản bên dưới hoặc gõ `/info 1` để xem chi tiết.")
-        self.send_message(chat_id, "\n".join(lines))
+        lines.append("")
+        lines.append("Chọn *Tài khoản* bên dưới để chuyển phạm vi, hoặc dùng `/info 1` để xem chi tiết tài khoản 1.")
+        self.send_message(chat_id, "\n".join(lines), reply_markup=self.get_main_keyboard(chat_id))
 
     def _resolve_account(self, token: Optional[str]):
         """Tìm tài khoản theo STT (#1, 1), username hoặc tên nhân vật."""
@@ -1393,14 +1629,10 @@ class TelegramAIBot:
             return
 
         accs = self.account_manager.accounts
+        curr_selected = self.selected_targets.get(chat_id)
 
-        if target_arg and target_arg.lower() in ("all", "tatca", "*"):
-            for a in accs:
-                info_text = self.format_char_full_info(a)
-                self.send_message(chat_id, info_text)
-            return
-
-        if target_arg:
+        # 1. Nếu người dùng chỉ định tài khoản cụ thể (khác all)
+        if target_arg and target_arg.lower() not in ("all", "tatca", "*"):
             inst = self._resolve_account(target_arg)
             if inst:
                 self.send_message(chat_id, self.format_char_full_info(inst))
@@ -1408,24 +1640,32 @@ class TelegramAIBot:
                 self.send_message(chat_id, f"[x] Không tìm thấy tài khoản '{target_arg}'. Gõ `/status` để xem danh sách.")
             return
 
-        # Nếu không truyền tham số:
-        if len(accs) == 1:
-            self.send_message(chat_id, self.format_char_full_info(accs[0]))
-        else:
-            self.send_message(chat_id, self.format_char_full_info(accs[0]))
-            opts = [f"`/info {a.config.acc_id}`" for a in accs]
-            prompt = f"\n> Đang quản lý {len(accs)} tài khoản. Bạn có thể nhấn nút tài khoản bên dưới hoặc gõ: " + ", ".join(opts) + " hoặc `/info all` để xem toàn bộ!"
-            self.send_message(chat_id, prompt)
+        # 2. Nếu đang chọn 1 tài khoản cụ thể trong menu (và không có target_arg == 'all')
+        if curr_selected is not None and not (target_arg and target_arg.lower() in ("all", "tatca", "*")):
+            inst = self._resolve_account(str(curr_selected))
+            if inst:
+                self.send_message(chat_id, self.format_char_full_info(inst))
+                return
+
+        # 3. Ngữ cảnh Tất cả tài khoản (ALL) hoặc target_arg == 'all'
+        # Gửi thông tin từng tài khoản (mỗi tài khoản 1 tin nhắn riêng biệt)
+        for a in accs:
+            self.send_message(chat_id, self.format_char_full_info(a))
+            time.sleep(0.08)
 
     def _send_bag_message(self, chat_id: Union[int, str], target_arg: Optional[str] = None) -> None:
         if not self.account_manager or not self.account_manager.accounts:
             self.send_message(chat_id, "[!] Chưa có tài khoản nào được nạp.")
             return
-        if target_arg and target_arg.lower() in ("all", "tatca", "*"):
-            for a in self.account_manager.accounts:
+        accs = self.account_manager.accounts
+        curr_selected = self.selected_targets.get(chat_id)
+        is_all = (target_arg and target_arg.lower() in ("all", "tatca", "*")) or (not target_arg and curr_selected is None)
+        if is_all:
+            for a in accs:
                 self.send_message(chat_id, self.format_char_bag_info(a))
+                time.sleep(0.05)
             return
-        inst = self._resolve_account(target_arg)
+        inst = self._resolve_account(target_arg if target_arg else str(curr_selected))
         if inst:
             self.send_message(chat_id, self.format_char_bag_info(inst))
         else:
@@ -1435,11 +1675,15 @@ class TelegramAIBot:
         if not self.account_manager or not self.account_manager.accounts:
             self.send_message(chat_id, "[!] Chưa có tài khoản nào được nạp.")
             return
-        if target_arg and target_arg.lower() in ("all", "tatca", "*"):
-            for a in self.account_manager.accounts:
+        accs = self.account_manager.accounts
+        curr_selected = self.selected_targets.get(chat_id)
+        is_all = (target_arg and target_arg.lower() in ("all", "tatca", "*")) or (not target_arg and curr_selected is None)
+        if is_all:
+            for a in accs:
                 self.send_message(chat_id, self.format_char_box_info(a))
+                time.sleep(0.05)
             return
-        inst = self._resolve_account(target_arg)
+        inst = self._resolve_account(target_arg if target_arg else str(curr_selected))
         if inst:
             self.send_message(chat_id, self.format_char_box_info(inst))
         else:
@@ -1492,33 +1736,43 @@ class TelegramAIBot:
                 return
 
         # Nếu chỉ xem thông tin đệ tử (/pet hoặc /pet 1 hoặc /pet all)
-        if target_arg and target_arg.lower() in ("all", "tatca", "*"):
+        curr_selected = self.selected_targets.get(chat_id)
+        is_all = (target_arg and target_arg.lower() in ("all", "tatca", "*")) or (not target_arg and curr_selected is None)
+        if is_all:
             for a in self.account_manager.accounts:
                 self.send_message(chat_id, self.format_char_pet_info(a))
+                time.sleep(0.05)
             return
 
-        inst = self._resolve_account(target_arg)
+        inst = self._resolve_account(target_arg if target_arg else str(curr_selected))
         if inst:
             self.send_message(chat_id, self.format_char_pet_info(inst))
         else:
             self.send_message(chat_id, f"[x] Không tìm thấy tài khoản.")
 
     def _send_tree_message(self, chat_id: Union[int, str], target_arg: Optional[str] = None) -> None:
-        inst = self._resolve_account(target_arg)
-        if not inst or not inst.client or not inst.client.myChar:
-            self.send_message(chat_id, "[!] Tài khoản chưa vào map.")
+        if not self.account_manager or not self.account_manager.accounts:
+            self.send_message(chat_id, "[!] Chưa có tài khoản nào được nạp.")
             return
-        tree = inst.client.myChar.magicTree
-        sec_str = f"Chín sau {tree.seconds}s ({int(tree.seconds/60)} phút)" if tree.seconds > 0 else "Đậu đã chín đầy đủ!"
-        msg = (
-            f"= *CÂY ĐẬU THẦN [{inst.tag}]*\n"
-            f"=============================\n"
-            f"> Cấp độ: *Cấp {tree.level}*\n"
-            f"> Số lượng đậu: *{tree.currPeas} / {tree.maxPeas}* hạt\n"
-            f"> Tình trạng: *{sec_str}*\n\n"
-            f"> Gõ `/harvest` để thu hoạch đậu ngay!"
-        )
-        self.send_message(chat_id, msg)
+        curr_selected = self.selected_targets.get(chat_id)
+        is_all = (target_arg and target_arg.lower() in ("all", "tatca", "*")) or (not target_arg and curr_selected is None)
+        targets = self.account_manager.accounts if is_all else [self._resolve_account(target_arg if target_arg else str(curr_selected))]
+        for inst in targets:
+            if not inst or not inst.client or not inst.client.myChar:
+                self.send_message(chat_id, f"[!] [{inst.tag if inst else '?'}] Tài khoản chưa vào map.")
+                continue
+            tree = inst.client.myChar.magicTree
+            sec_str = f"Chín sau {tree.seconds}s ({int(tree.seconds/60)} phút)" if tree.seconds > 0 else "Đậu đã chín đầy đủ!"
+            msg = (
+                f"= *CÂY ĐẬU THẦN [{inst.tag}]*\n"
+                f"=============================\n"
+                f"> Cấp độ: *Cấp {tree.level}*\n"
+                f"> Số lượng đậu: *{tree.currPeas} / {tree.maxPeas}* hạt\n"
+                f"> Tình trạng: *{sec_str}*\n\n"
+                f"> Gõ `/harvest` để thu hoạch đậu ngay!"
+            )
+            self.send_message(chat_id, msg)
+            time.sleep(0.05)
 
     def _send_harvest_message(self, chat_id: Union[int, str], target_arg: Optional[str] = None) -> None:
         if not self.account_manager or not self.account_manager.accounts:
@@ -1533,14 +1787,34 @@ class TelegramAIBot:
         self.send_message(chat_id, f"= Đã gửi yêu cầu thu hoạch đậu thần cho {count} tài khoản!")
 
     def _send_map_message(self, chat_id: Union[int, str], target_arg: Optional[str] = None) -> None:
-        inst = self._resolve_account(target_arg)
+        if not self.account_manager or not self.account_manager.accounts:
+            self.send_message(chat_id, "[!] Chưa có tài khoản nào được nạp.")
+            return
+        curr_selected = self.selected_targets.get(chat_id)
+        is_all = (target_arg and target_arg.lower() in ("all", "tatca", "*")) or (not target_arg and curr_selected is None)
+        if is_all:
+            for a in self.account_manager.accounts:
+                self.send_message(chat_id, self.format_char_map_info(a))
+                time.sleep(0.05)
+            return
+        inst = self._resolve_account(target_arg if target_arg else str(curr_selected))
         if inst:
             self.send_message(chat_id, self.format_char_map_info(inst))
         else:
             self.send_message(chat_id, "[x] Không tìm thấy tài khoản.")
 
     def _send_combat_message(self, chat_id: Union[int, str], target_arg: Optional[str] = None) -> None:
-        inst = self._resolve_account(target_arg)
+        if not self.account_manager or not self.account_manager.accounts:
+            self.send_message(chat_id, "[!] Chưa có tài khoản nào được nạp.")
+            return
+        curr_selected = self.selected_targets.get(chat_id)
+        is_all = (target_arg and target_arg.lower() in ("all", "tatca", "*")) or (not target_arg and curr_selected is None)
+        if is_all:
+            for a in self.account_manager.accounts:
+                self.send_message(chat_id, self.format_char_combat_info(a))
+                time.sleep(0.05)
+            return
+        inst = self._resolve_account(target_arg if target_arg else str(curr_selected))
         if inst:
             self.send_message(chat_id, self.format_char_combat_info(inst))
         else:
@@ -1654,7 +1928,7 @@ class TelegramAIBot:
             for slot_idx, it in matched_items:
                 opts = " | ".join([opt.getText() for opt in it.options[:2]])
                 opt_str = f" _{opts}_" if opts else ""
-                lines.append(f"  • Ô {slot_idx+1:02d}: x{it.quantity}{opt_str}")
+                lines.append(f"  Ô {slot_idx+1:02d}: x{it.quantity}{opt_str}")
 
             if first_it.options:
                 all_opts = " | ".join([opt.getText() for opt in first_it.options])
@@ -1703,9 +1977,9 @@ class TelegramAIBot:
                     item_sample_name = get_item_display_name(matched[0][1].template_id, matched[0][1].info)
                     item_sample_id = matched[0][1].template_id
                 slots_str = ", ".join([f"Ô {s+1:02d} (x{it.quantity})" for s, it in matched])
-                lines.append(f"[=] *[{inst.tag}]*: Có *x{acc_total:,}* ({slots_str})")
+                lines.append(f"• *[{inst.tag}]*: Có *x{acc_total:,}* ({slots_str})")
             else:
-                lines.append(f"[x] *[{inst.tag}]*: Không có")
+                lines.append(f"• *[{inst.tag}]*: [Không có]")
 
         lines.append("=============================")
         if grand_total > 0:
@@ -1716,62 +1990,347 @@ class TelegramAIBot:
                 if meta_footer:
                     lines.append(f"> Chi tiết vật phẩm: _{meta_footer}_")
         else:
-            lines.append(f"[x] Không tài khoản nào có vật phẩm `{query_clean}` trong balo.")
+            lines.append(f"[!] Không tài khoản nào có vật phẩm `{query_clean}` trong balo.")
 
         self.send_message(chat_id, "\n".join(lines))
 
     def _send_zone_message(self, chat_id: Union[int, str], target_arg: Optional[str] = None, sub_args: Optional[List[str]] = None) -> None:
-        """Xử lý lệnh /zone: Xem danh sách khu vực hoặc đổi khu."""
+        """Xử lý lệnh /zone: Xem danh sách khu vực, đổi khu riêng lẻ hoặc tản khu vắng toàn đội."""
         if not self.account_manager or not self.account_manager.accounts:
             self.send_message(chat_id, "[!] Chưa có tài khoản nào được nạp.")
             return
 
-        inst = self._resolve_account(target_arg)
-        if not inst or not inst.client or not inst.client.isConnected() or not inst.client.myChar:
-            self.send_message(chat_id, f"[!] Tài khoản chưa online hoặc chưa vào map.")
+        is_all = (target_arg is None) or (target_arg.lower() in ("all", "tatca", "*"))
+        args_clean = [a.lower() for a in (sub_args or [])]
+        if any(a in ("all", "tatca", "*") for a in args_clean):
+            is_all = True
+            args_clean = [a for a in args_clean if a not in ("all", "tatca", "*")]
+
+        action = args_clean[0] if args_clean else None
+
+        # ----------------------------------------------------------------------
+        # TRƯỜNG HỢP 1: TẢN KHU VẮNG CHO TOÀN BỘ TÀI KHOẢN (ALL /zone min)
+        # ----------------------------------------------------------------------
+        if is_all and action in ("min", "least", "itnguoi", "vang", "empty", "auto"):
+            connected = [
+                a for a in self.account_manager.accounts
+                if a.client and a.client.isConnected() and a.client.myChar and a.client.myChar.mapInfo
+            ]
+            if not connected:
+                self.send_message(chat_id, "[!] Không có tài khoản nào đang online và trong map để đổi khu.")
+                return
+
+            results = self.account_manager.disperse_zones_min(connected)
+            lines = [
+                "= *PHÂN TÁN KHU VẮNG TOÀN ĐỘI (/zone min)*",
+                f"> Số tài khoản: *{len(results)}* | Cơ chế: *Không đụng nhau, giữ nguyên nếu đã ở khu min*",
+                "=============================",
+            ]
+            for r in results:
+                a = r["account"]
+                f_z = r["from_zone"]
+                t_z = r["to_zone"]
+                m_name = r.get("map_name", "")
+                c_name = getattr(a, "char_name", "") or "NV"
+                if r["stayed"]:
+                    lines.append(f"• *[{a.tag}]* ({c_name}): Đang ở *Khu {t_z:02d}* ({m_name}) -> Đã là khu ít người nhất, giữ nguyên")
+                else:
+                    lines.append(f"• *[{a.tag}]* ({c_name}): Khu {f_z:02d} -> *Khu {t_z:02d}* ({m_name}) -> Tản vào khu vắng")
+
+            lines.append("=============================")
+            lines.append("> *Thành công:* Toàn bộ tài khoản đã được tản đều ra các khu vắng, không đụng nhau!")
+            self.send_message(chat_id, "\n".join(lines))
             return
 
-        # Nếu có tham số đổi khu (vd: /zone min hoặc /zone 5)
-        if sub_args:
-            action = sub_args[0].lower()
-            if action in ("min", "least", "itnguoi", "vang", "empty", "auto"):
-                zid = inst.client.change_to_least_populated_zone()
-                if zid is not None:
-                    self.send_message(chat_id, f"[=] [{inst.tag}] Đã chuyển sang *Khu {zid:02d}* (khu vắng nhất)!")
+        # ----------------------------------------------------------------------
+        # TRƯỜNG HỢP 2: ĐỔI SANG CÙNG 1 SỐ KHU CHO TẤT CẢ (ALL /zone <số>)
+        # ----------------------------------------------------------------------
+        if is_all and action and action.isdigit():
+            target_zid = int(action)
+            connected = [
+                a for a in self.account_manager.accounts
+                if a.client and a.client.isConnected() and a.client.myChar and a.client.myChar.mapInfo
+            ]
+            if not connected:
+                self.send_message(chat_id, "[!] Không có tài khoản nào đang online để đổi khu.")
+                return
+            for a in connected:
+                a.client.change_zone(target_zid)
+                a.last_zone_id = target_zid
+                a.snapshot_active_autos()
+                time.sleep(0.08)
+            self.send_message(chat_id, f"[=] Đã gửi yêu cầu đổi sang *Khu {target_zid:02d}* cho toàn bộ {len(connected)} tài khoản!")
+            return
+
+        # ----------------------------------------------------------------------
+        # TRƯỜNG HỢP 3: XEM DANH SÁCH KHU VỰC HOẶC ĐỔI KHU TRÊN 1 ACC
+        # ----------------------------------------------------------------------
+        if not action:
+            # Hiển thị danh sách khu vực
+            if is_all:
+                connected = [
+                    a for a in self.account_manager.accounts
+                    if a.client and a.client.isConnected() and a.client.myChar and a.client.myChar.mapInfo
+                ]
+                if not connected:
+                    self.send_message(chat_id, "[!] Không có tài khoản nào đang online và trong map.")
+                    return
+
+                maps_dict: Dict[int, List[Any]] = {}
+                for a in connected:
+                    mid = a.client.myChar.mapInfo.mapID
+                    maps_dict.setdefault(mid, []).append(a)
+
+                for mid, accs_in_map in maps_dict.items():
+                    rep = accs_in_map[0]
+                    rep.client.request_zones()
+                    time.sleep(0.3)
+                    m = rep.client.myChar.mapInfo
+
+                    # Vị trí các tài khoản trong map này
+                    zone_occupants: Dict[int, List[str]] = {}
+                    for a in accs_in_map:
+                        c_name = a.char_name if a.char_name and a.char_name != "Chưa vào" else a.config.username
+                        zid = getattr(a.client.myChar.mapInfo, "zoneID", -1)
+                        if zid >= 0:
+                            zone_occupants.setdefault(zid, []).append(c_name)
+
+                    acc_status_list = []
+                    for a in accs_in_map:
+                        c_name = a.char_name if a.char_name and a.char_name != "Chưa vào" else a.config.username
+                        zid = getattr(a.client.myChar.mapInfo, "zoneID", 0)
+                        acc_status_list.append(f"• *[{a.tag}]* {c_name}: *Khu {zid:02d}*")
+
+                    lines = [
+                        f"= *DANH SÁCH KHU VỰC* (Bản đồ: *{m.mapName}* - ID: `{m.mapID}`)",
+                        f"> Vị trí các tài khoản ({len(accs_in_map)} acc):",
+                        "\n".join(acc_status_list),
+                        "=============================",
+                    ]
+
+                    if m.zones:
+                        z_parts = []
+                        for z in m.zones:
+                            occupants = zone_occupants.get(z.zoneId, [])
+                            occ_mark = f" <{', '.join(occupants)}>" if occupants else ""
+                            density = " Đầy" if z.numPlayer >= z.maxPlayer else (" Vắng" if z.numPlayer <= 2 else "")
+                            z_parts.append(f"*K{z.zoneId:02d}:* {z.numPlayer}/{z.maxPlayer}{density}{occ_mark}")
+
+                        for i in range(0, len(z_parts), 3):
+                            lines.append(" | ".join(z_parts[i:i+3]))
+                    else:
+                        lines.append("Chưa tải được danh sách khu. Vui lòng thử lại sau 1s.")
+
+                    lines.append("=============================")
+                    lines.append("> *Thao tác:* Gõ `/zone <số>` để đổi khu, hoặc `/zone min` để vào khu vắng nhất.")
+                    self.send_message(chat_id, "\n".join(lines))
+                    time.sleep(0.05)
+                return
+
+            # Chỉ xem 1 tài khoản cụ thể
+            inst = self._resolve_account(target_arg)
+            if not inst or not inst.client or not inst.client.isConnected() or not inst.client.myChar:
+                self.send_message(chat_id, "[!] Tài khoản chưa online hoặc chưa vào map.")
+                return
+
+            inst.client.request_zones()
+            time.sleep(0.3)
+            m = inst.client.myChar.mapInfo
+            c_name = inst.char_name if inst.char_name and inst.char_name != "Chưa vào" else inst.config.username
+
+            zone_occupants = {}
+            for a in self.account_manager.accounts:
+                if a.client and a.client.isConnected() and a.client.myChar and a.client.myChar.mapInfo:
+                    if a.client.myChar.mapInfo.mapID == m.mapID:
+                        name = a.char_name if a.char_name and a.char_name != "Chưa vào" else a.config.username
+                        zid = getattr(a.client.myChar.mapInfo, "zoneID", -1)
+                        if zid >= 0:
+                            zone_occupants.setdefault(zid, []).append(name)
+
+            lines = [
+                f"= *DANH SÁCH KHU VỰC [{inst.tag}]*",
+                f"> Bản đồ: *{m.mapName}* (ID: `{m.mapID}`)",
+                f"> Nhân vật: *{c_name}* (Khu hiện tại: *Khu {m.zoneID:02d}*)",
+                "=============================",
+            ]
+            if m.zones:
+                z_parts = []
+                for z in m.zones:
+                    occupants = zone_occupants.get(z.zoneId, [])
+                    occ_mark = f" <{', '.join(occupants)}>" if occupants else ""
+                    density = " Đầy" if z.numPlayer >= z.maxPlayer else (" Vắng" if z.numPlayer <= 2 else "")
+                    z_parts.append(f"*K{z.zoneId:02d}:* {z.numPlayer}/{z.maxPlayer}{density}{occ_mark}")
+
+                for i in range(0, len(z_parts), 3):
+                    lines.append(" | ".join(z_parts[i:i+3]))
+            else:
+                lines.append("Chưa tải được danh sách khu. Vui lòng thử lại sau 1s.")
+
+            lines.append("=============================")
+            lines.append("> *Thao tác:* Gõ `/zone <số>` để đổi khu, hoặc `/zone min` để vào khu vắng nhất.")
+            self.send_message(chat_id, "\n".join(lines))
+            return
+
+        # Nếu có action (min hoặc đổi sang số khu cụ thể) trên 1 tài khoản
+        inst = self._resolve_account(target_arg)
+        if not inst or not inst.client or not inst.client.isConnected() or not inst.client.myChar:
+            self.send_message(chat_id, "[!] Tài khoản chưa online hoặc chưa vào map.")
+            return
+
+        if action in ("min", "least", "itnguoi", "vang", "empty", "auto"):
+            curr_zid = getattr(inst.client.myChar.mapInfo, "zoneID", -1)
+            zid = inst.client.change_to_least_populated_zone()
+            if zid is not None:
+                if zid == curr_zid:
+                    self.send_message(chat_id, f"[=] [{inst.tag}] Đang ở *Khu {zid:02d}* (đã là khu ít người nhất, giữ nguyên không đổi)!")
                 else:
-                    self.send_message(chat_id, f"[!] [{inst.tag}] Đã ở khu vắng nhất hoặc không lấy được danh sách.")
-                return
-            elif action.isdigit():
-                zid = int(action)
-                inst.client.change_zone(zid)
-                self.send_message(chat_id, f"[=] [{inst.tag}] Đã gửi yêu cầu đổi sang *Khu {zid:02d}*!")
+                    inst.last_zone_id = zid
+                    inst.snapshot_active_autos()
+                    self.send_message(chat_id, f"[=] [{inst.tag}] Đã chuyển sang *Khu {zid:02d}* (khu vắng nhất)!")
+            else:
+                self.send_message(chat_id, f"[!] [{inst.tag}] Đã ở khu vắng nhất hoặc không lấy được danh sách.")
+            return
+        elif action and action.isdigit():
+            zid = int(action)
+            inst.client.change_zone(zid)
+            inst.last_zone_id = zid
+            inst.snapshot_active_autos()
+            self.send_message(chat_id, f"[=] [{inst.tag}] Đã gửi yêu cầu đổi sang *Khu {zid:02d}*!")
+            return
+
+    def _send_autohs_message(self, chat_id: Union[int, str], target_arg: Optional[str] = None, sub_args: Optional[List[str]] = None) -> None:
+        """Xử lý lệnh /autohs và /hs: Bật/tắt tự hồi sinh, cài đặt chế độ ngọc/về thành."""
+        if not self.account_manager or not self.account_manager.accounts:
+            self.send_message(chat_id, "[!] Chưa có tài khoản nào được nạp.")
+            return
+
+        is_all = (target_arg is None) or (target_arg.lower() in ("all", "tatca", "*"))
+        args_clean = [a.lower() for a in (sub_args or [])]
+        if any(a in ("all", "tatca", "*") for a in args_clean):
+            is_all = True
+            args_clean = [a for a in args_clean if a not in ("all", "tatca", "*")]
+
+        action = args_clean[0] if args_clean else ""
+
+        if is_all:
+            targets = [a for a in self.account_manager.accounts if a.client and a.client.isConnected()]
+            if not targets:
+                self.send_message(chat_id, "[!] Không có tài khoản nào đang online để điều khiển Tự Hồi Sinh.")
                 return
 
-        # Nếu không có tham số -> Hiển thị danh sách khu
-        inst.client.request_zones()
-        time.sleep(0.3)
-        m = inst.client.myChar.mapInfo
+            if action in ("on", "start", "1", "true", "bat"):
+                mode = None
+                if len(args_clean) > 1 and args_clean[1] in ("gem", "ngoc"):
+                    mode = "gem"
+                elif len(args_clean) > 1 and args_clean[1] in ("town", "ve", "thanh", "nha"):
+                    mode = "town"
+
+                for a in targets:
+                    if mode:
+                        a.client.set_auto_revive_mode(mode)
+                    a.client.auto_revive_manager.enable()
+                    a.snapshot_active_autos()
+                mode_str = f" ({mode})" if mode else ""
+                self.send_message(chat_id, f"[=] Đã BẬT Tự Động Hồi Sinh{mode_str} cho TOÀN BỘ {len(targets)} tài khoản!")
+                return
+
+            elif action in ("off", "stop", "0", "false", "tat"):
+                for a in targets:
+                    a.client.auto_revive_manager.disable()
+                    a.snapshot_active_autos()
+                self.send_message(chat_id, f"[x] Đã TẮT Tự Động Hồi Sinh cho TOÀN BỘ {len(targets)} tài khoản!")
+                return
+
+            elif action in ("gem", "ngoc", "place", "here"):
+                for a in targets:
+                    a.client.set_auto_revive_mode("gem")
+                    a.client.auto_revive_manager.enable()
+                    a.snapshot_active_autos()
+                self.send_message(chat_id, f"[=] Đã cài đặt chế độ Hồi Sinh BẰNG NGỌC TẠI CHỖ (và bật AutoHS) cho TOÀN BỘ {len(targets)} tài khoản!")
+                return
+
+            elif action in ("town", "ve", "thanh", "nha", "home"):
+                for a in targets:
+                    a.client.set_auto_revive_mode("town")
+                    a.client.auto_revive_manager.enable()
+                    a.snapshot_active_autos()
+                self.send_message(chat_id, f"[=] Đã cài đặt chế độ Hồi Sinh VỀ THÀNH (và bật AutoHS) cho TOÀN BỘ {len(targets)} tài khoản!")
+                return
+
+            # Nếu không có tham số hoặc gõ status: hiển thị bảng trạng thái toàn đội
+            lines = [
+                "= *TRẠNG THÁI TỰ ĐỘNG HỒI SINH (TOÀN ĐỘI)*",
+                "=============================",
+            ]
+            for a in targets:
+                st = a.client.get_auto_revive_status()
+                st_icon = "[ON]" if st["is_enabled"] else "[OFF]"
+                lines.append(f"• *[{a.tag}]*: `{st_icon}` Chế độ: *{st['mode_str']}* (Đã HS: {st['revive_count']} lần)")
+            lines.append("=============================")
+            lines.append("> *Lệnh:* `/autohs on` | `/autohs off` | `/autohs ngoc` | `/autohs ve`")
+            self.send_message(chat_id, "\n".join(lines))
+            return
+
+        # Cho 1 tài khoản cụ thể
+        inst = self._resolve_account(target_arg)
+        if not inst or not inst.client or not inst.client.isConnected():
+            self.send_message(chat_id, "[!] Tài khoản chưa kết nối online.")
+            return
+
+        if action in ("on", "start", "1", "true", "bat"):
+            if len(args_clean) > 1 and args_clean[1] in ("gem", "ngoc"):
+                inst.client.set_auto_revive_mode("gem")
+            elif len(args_clean) > 1 and args_clean[1] in ("town", "ve", "thanh", "nha"):
+                inst.client.set_auto_revive_mode("town")
+            inst.client.auto_revive_manager.enable()
+            inst.snapshot_active_autos()
+            st = inst.client.get_auto_revive_status()
+            self.send_message(chat_id, f"[=] [{inst.tag}] Đã BẬT Tự Động Hồi Sinh (Chế độ: *{st['mode_str']}*)!")
+            return
+
+        elif action in ("off", "stop", "0", "false", "tat"):
+            inst.client.auto_revive_manager.disable()
+            inst.snapshot_active_autos()
+            self.send_message(chat_id, f"[x] [{inst.tag}] Đã TẮT Tự Động Hồi Sinh!")
+            return
+
+        elif action in ("gem", "ngoc", "place", "here"):
+            inst.client.set_auto_revive_mode("gem")
+            inst.client.auto_revive_manager.enable()
+            inst.snapshot_active_autos()
+            self.send_message(chat_id, f"[=] [{inst.tag}] Đã chuyển sang chế độ Hồi Sinh BẰNG NGỌC TẠI CHỖ (và bật AutoHS)!")
+            return
+
+        elif action in ("town", "ve", "thanh", "nha", "home"):
+            inst.client.set_auto_revive_mode("town")
+            inst.client.auto_revive_manager.enable()
+            inst.snapshot_active_autos()
+            self.send_message(chat_id, f"[=] [{inst.tag}] Đã chuyển sang chế độ Hồi Sinh VỀ THÀNH (và bật AutoHS)!")
+            return
+
+        elif not action:
+            # Toggle
+            new_state = inst.client.toggle_auto_revive()
+            inst.snapshot_active_autos()
+            st = inst.client.get_auto_revive_status()
+            self.send_message(
+                chat_id,
+                f"[{inst.tag}] Đã {'BẬT [ON]' if new_state else 'TẮT [OFF]'} Tự Hồi Sinh (Chế độ: *{st['mode_str']}*)!"
+            )
+            return
+
+        # Hiển thị trạng thái chi tiết
+        st = inst.client.get_auto_revive_status()
         lines = [
-            f"= *DANH SÁCH KHU VỰC [{inst.tag}]*",
-            f"> Bản đồ: *{m.mapName}* (ID: `{m.mapID}`)",
-            f"> Khu hiện tại: *Khu {m.zoneID:02d}*",
+            f"= *CẤU HÌNH TỰ ĐỘNG HỒI SINH [{inst.tag}]*",
             f"=============================",
+            f"> Trạng thái:     {'[=] ĐANG BẬT [ON]' if st['is_enabled'] else '[ ] ĐÃ TẮT [OFF]'}",
+            f"> Chế độ:         *{st['mode_str']}*",
+            f"> Đã hồi sinh:    *{st['revive_count']}* lần",
+            f"> Tình trạng NV:  {'ĐÃ CHẾT' if st['is_currently_dead'] else 'CÒN SỐNG'}",
+            f"=============================",
+            f"> *Lệnh:* `/autohs on` | `/autohs off` | `/autohs ngoc` | `/autohs ve`",
         ]
-        if m.zones:
-            z_parts = []
-            for z in m.zones:
-                is_curr = (z.zoneId == m.zoneID)
-                curr_mark = " <=" if is_curr else ""
-                density = " [ĐẦY]" if z.numPlayer >= z.maxPlayer else (" [VẮNG]" if z.numPlayer <= 2 else "")
-                z_parts.append(f"*K{z.zoneId:02d}:* {z.numPlayer}/{z.maxPlayer}{density}{curr_mark}")
-
-            for i in range(0, len(z_parts), 3):
-                lines.append(" | ".join(z_parts[i:i+3]))
-        else:
-            lines.append("Chưa tải được danh sách khu. Vui lòng thử lại sau 1s.")
-
-        lines.append("=============================")
-        lines.append("> *Thao tác:* Gõ `/zone <số>` để đổi khu, hoặc `/zone min` để vào khu vắng nhất.")
         self.send_message(chat_id, "\n".join(lines))
 
     def _send_boss_message(self, chat_id: Union[int, str], target_arg: Optional[str] = None, sub_args: Optional[List[str]] = None) -> None:
@@ -1813,7 +2372,7 @@ class TelegramAIBot:
             bh = a.client.boss_hunter if a.client else None
             kills = getattr(bh, "boss_kill_count", 0) if bh else 0
             loots = getattr(bh, "boss_looted_items_count", 0) if bh else 0
-            hunting_str = "[ON] Đang săn" if (bh and getattr(bh, "is_hunting", False)) else "[OFF] Tắt"
+            hunting_str = "[=] Đang săn" if (bh and getattr(bh, "is_hunting", False)) else "[ ] Tắt"
             total_kills += kills
             total_loots += loots
 
@@ -1829,7 +2388,7 @@ class TelegramAIBot:
         if all_histories:
             lines.append("\n= *3. LỊCH SỬ HẠ BOSS GẦN ĐÂY:*")
             for h in all_histories[-5:]:
-                lines.append(f"  • [{h['acc_tag']}] Tiêu diệt *{h['name']}* tại {h.get('map_name', 'Chưa rõ')} ({h.get('time', '')})")
+                lines.append(f"  [{h['acc_tag']}] Tiêu diệt *{h['name']}* tại {h.get('map_name', 'Chưa rõ')} ({h.get('time', '')})")
 
         lines.append("=============================")
         lines.append("> *Lệnh:* `/hunt on` | `/hunt off` | `/boss go <tên boss>`")
@@ -1866,7 +2425,7 @@ class TelegramAIBot:
             return
 
         if not inst:
-            self.send_message(chat_id, f"[x] Không tìm thấy tài khoản '{target_arg}'.")
+            self.send_message(chat_id, f"[!] Không tìm thấy tài khoản '{target_arg}'.")
             return
 
         if inst.client and inst.client.isConnected():
@@ -1893,7 +2452,7 @@ class TelegramAIBot:
             self.account_manager.stop_all()
             self.send_message(
                 chat_id,
-                f"[x] *[ĐĂNG XUẤT]* Đã ngắt kết nối an toàn TOÀN BỘ tài khoản (đã dừng auto-reconnect).",
+                f"[=] *[ĐĂNG XUẤT THÀNH CÔNG]* Đã ngắt kết nối an toàn TOÀN BỘ ({len(self.account_manager.accounts)}) tài khoản (đã dừng auto-reconnect).",
                 reply_markup=self.get_main_keyboard(chat_id)
             )
             return
@@ -1907,7 +2466,7 @@ class TelegramAIBot:
             self.account_manager.stop_all()
             self.send_message(
                 chat_id,
-                f"[x] *[ĐĂNG XUẤT]* Đã ngắt kết nối an toàn TOÀN BỘ tài khoản (đã dừng auto-reconnect).",
+                f"[=] *[ĐĂNG XUẤT THÀNH CÔNG]* Đã ngắt kết nối an toàn TOÀN BỘ ({len(self.account_manager.accounts)}) tài khoản (đã dừng auto-reconnect).",
                 reply_markup=self.get_main_keyboard(chat_id)
             )
             return
@@ -1919,7 +2478,7 @@ class TelegramAIBot:
         self.account_manager.stop_account(inst)
         self.send_message(
             chat_id,
-            f"[x] *[ĐĂNG XUẤT]* Đã ngắt kết nối an toàn cho *{inst.tag}* (đã dừng auto-reconnect)!",
+            f"[=] *[ĐĂNG XUẤT THÀNH CÔNG]* Đã ngắt kết nối an toàn cho *{inst.tag}* (đã dừng auto-reconnect)!",
             reply_markup=self.get_main_keyboard(chat_id)
         )
 

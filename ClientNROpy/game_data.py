@@ -148,6 +148,32 @@ def format_big_number(val: Union[int, float]) -> str:
     return f"{sign}{abs_val}"
 
 
+def format_compact_number(val: Union[int, float]) -> str:
+    """Định dạng số cực ngắn gọn theo phong cách k, tr, tỷ (ví dụ: 13.5 tỷ, 13.9tr, 32.1k, 637)."""
+    try:
+        val = int(val)
+    except (ValueError, TypeError):
+        return str(val)
+    sign = "-" if val < 0 else ""
+    abs_val = abs(val)
+    if abs_val >= 1_000_000_000:
+        s = f"{abs_val / 1_000_000_000:.1f}"
+        if s.endswith(".0"):
+            s = s[:-2]
+        return f"{sign}{s} tỷ"
+    if abs_val >= 1_000_000:
+        s = f"{abs_val / 1_000_000:.1f}"
+        if s.endswith(".0"):
+            s = s[:-2]
+        return f"{sign}{s}tr"
+    if abs_val >= 1_000:
+        s = f"{abs_val / 1_000:.1f}"
+        if s.endswith(".0"):
+            s = s[:-2]
+        return f"{sign}{s}k"
+    return f"{sign}{abs_val}"
+
+
 # ------------------------------------------------------------------------------
 # 7. CÁC HÀM TRA CỨU NHANH (LOOKUP HELPERS)
 # ------------------------------------------------------------------------------

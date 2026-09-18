@@ -381,8 +381,7 @@ class AutoManager:
         self.is_boss_hunter_enabled: bool = False
         self.hunt_all: bool = False
         self.target_bosses: Set[str] = set()
-        for t in self.DEFAULT_WHITELIST:
-            self.add_hunt_target(t)
+
 
         self.auto_loot_boss: bool = True
         self.auto_patrol: bool = True
@@ -2250,6 +2249,11 @@ class AutoManager:
         return self.is_boss_hunter_enabled
 
     @property
+    def is_enabled(self) -> bool:
+        """Alias cho AutoReviveManager.is_enabled."""
+        return self.auto_revive
+
+    @property
     def mode(self) -> str:
         """Alias cho AutoReviveManager.mode."""
         return self.revive_mode
@@ -2270,6 +2274,10 @@ class AutoManager:
     def toggle(self, enable: Optional[bool] = None) -> bool:
         """Alias cho AutoReviveManager.toggle()."""
         return self.toggle_auto_revive(enable)
+
+    def set_mode(self, mode: str) -> bool:
+        """Alias cho AutoReviveManager.set_mode()."""
+        return self.set_auto_revive_mode(mode)
 
     def start_auto(self, item_id: int, interval_minutes: float) -> Tuple[bool, str]:
         """Alias cho AutoUseItemManager.start_auto."""
@@ -2336,9 +2344,9 @@ class AutoManager:
         """Cài đặt chế độ đánh khi đệ kêu lười ('mob', 'pet', 'me')."""
         m_lower = mode.lower().strip()
         atk_mode = AutoTrainPetAttackMode.ATTACK_CLOSEST_MOB
-        if m_lower in ("pet", "mypet", "detu"):
+        if m_lower in ("pet", "mypet", "detu", "attack_my_pet"):
             atk_mode = AutoTrainPetAttackMode.ATTACK_MY_PET
-        elif m_lower in ("me", "myself", "banthan"):
+        elif m_lower in ("me", "myself", "banthan", "attack_myself"):
             atk_mode = AutoTrainPetAttackMode.ATTACK_MYSELF
 
         self.train_pet.set_attack_mode(atk_mode)

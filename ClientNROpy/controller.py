@@ -432,21 +432,12 @@ class Controller(IMessageHandler):
                     )
                     self.myChar.task = new_task
                     self.myChar.ctaskId = task_id
-                    self.myChar.task_name = name
+                    self.myChar.task_name = new_task.clean_name
 
                     if is_new_task:
-                        clean_name = name.strip()
-                        if "\n" in clean_name or "\r" in clean_name:
-                            lines = [l.strip() for l in clean_name.replace("\r", "").split("\n") if l.strip()]
-                            task_line = next((l for l in reversed(lines) if "nhiệm vụ" in l.lower()), None)
-                            if task_line:
-                                clean_name = task_line.split(":", 1)[-1].strip() if ":" in task_line else task_line.strip()
-                            else:
-                                filtered = [l for l in lines if not any(w in l.lower() for w in ("cấp vip", "coin:", "thẻ tháng", "quy lão", "_____", "nạp"))]
-                                clean_name = filtered[-1] if filtered else lines[0]
-
                         from .logger import logger
-                        logger.system(f"Nhận nhiệm vụ: [{task_id}] {clean_name} (Bước {index + 1}/{max(1, n_sub)})", account_tag=self.account_tag)
+                        prog_info = f" - {new_task.progress_str}" if new_task.progress_str else ""
+                        logger.system(f"Nhận nhiệm vụ: [{task_id}] {new_task.clean_name}{prog_info} (Bước {index + 1}/{max(1, n_sub)})", account_tag=self.account_tag)
 
                     for cb in self.on_task_callbacks:
                         try:
@@ -464,7 +455,8 @@ class Controller(IMessageHandler):
                         self.myChar.task.index += 1
                         self.myChar.task.count = 0
                         from .logger import logger
-                        logger.system(f"Nhiệm vụ bước tiếp theo: Bước {self.myChar.task.index + 1}", account_tag=self.account_tag)
+                        prog_info = f": {self.myChar.task.progress_str}" if self.myChar.task.progress_str else ""
+                        logger.system(f"Nhiệm vụ bước tiếp theo: Bước {self.myChar.task.index + 1}{prog_info}", account_tag=self.account_tag)
                         for cb in self.on_task_callbacks:
                             try:
                                 cb(self.myChar.task)
@@ -480,6 +472,9 @@ class Controller(IMessageHandler):
                     count = msg.reader().readShort()
                     if self.myChar.task:
                         self.myChar.task.count = count
+                        from .logger import logger
+                        prog_info = f": {self.myChar.task.progress_str}" if self.myChar.task.progress_str else f": {count}"
+                        logger.system(f"Cập nhật nhiệm vụ{prog_info}", account_tag=self.account_tag)
                         for cb in self.on_task_callbacks:
                             try:
                                 cb(self.myChar.task)
@@ -1067,8 +1062,11 @@ class Controller(IMessageHandler):
                 self.playerDataList.append(player)
                 logger.debug(f"  -> {player}", account_tag=self.account_tag)
 
-            for cb in self.on_login_ok_callbacks:
-                cb(self.playerDataList)
+            if self.on_login_ok_callbacks:
+                for cb in self.on_login_ok_callbacks:
+                    cb(self.playerDataList)
+            elif self.playerDataList:
+                self.service.selectCharToPlay(self.playerDataList[0].name)
         except Exception as ex:
             from .logger import logger
             logger.error(f"readLogin error: {ex}", account_tag=self.account_tag)

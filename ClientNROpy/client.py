@@ -7,7 +7,7 @@ thành một API dễ sử dụng cho các tool và bot game headless.
 
 import threading
 import time
-from typing import Optional, List, Callable, Union, Tuple, Any, Dict
+from typing import Optional, List, Callable, Union, Tuple, Any, Dict, Set
 from .session import Session_ME
 from .controller import Controller
 from .service import Service
@@ -124,17 +124,19 @@ class ClientNRO:
         """Yêu cầu đổi sang khu vực chỉ định (cmd 21)."""
         self.service.requestChangeZone(zone_id)
 
-    def change_to_least_populated_zone(self) -> Optional[int]:
+    def change_to_least_populated_zone(self, excluded_zones: Optional[Set[int]] = None) -> Optional[int]:
         """
         Tìm và tự động chuyển sang khu vực có ít người chơi nhất trong map hiện tại.
+        - Nếu khu hiện tại đã là khu ít người nhất (hoặc bằng min), giữ nguyên không đổi.
+        - Tham số excluded_zones: loại trừ các khu đã có tài khoản khác chiếm (tránh đụng nhau).
         Trả về zoneId được chọn hoặc None nếu thất bại.
         """
         try:
             self.request_zones()
-            time.sleep(0.4)
+            time.sleep(0.35)
             zones = getattr(self.myChar.mapInfo, "zones", [])
             if not zones:
-                time.sleep(0.3)
+                time.sleep(0.25)
                 zones = getattr(self.myChar.mapInfo, "zones", [])
 
             if not zones:
@@ -146,9 +148,26 @@ class ClientNRO:
             if not valid_zones:
                 valid_zones = list(zones)
 
+            min_player_count = min(getattr(z, "numPlayer", 0) for z in valid_zones)
+
+            # Nếu khu đang đứng đã là khu ít người nhất (<= min_player_count)
+            # và không bị loại trừ thì giữ nguyên, không đổi đi đâu hết
+            curr_obj = next((z for z in valid_zones if getattr(z, "zoneId", -1) == current_zone), None)
+            if (
+                curr_obj is not None
+                and getattr(curr_obj, "numPlayer", 0) <= min_player_count
+                and (not excluded_zones or current_zone not in excluded_zones)
+            ):
+                return current_zone
+
+            # Lọc các khu ứng viên không nằm trong danh sách loại trừ (tránh đụng nhau)
+            candidate_zones = [z for z in valid_zones if not excluded_zones or getattr(z, "zoneId", 0) not in excluded_zones]
+            if not candidate_zones:
+                candidate_zones = valid_zones
+
             # Sắp xếp tăng dần theo số lượng người
-            valid_zones.sort(key=lambda z: getattr(z, "numPlayer", 0))
-            best = valid_zones[0]
+            candidate_zones.sort(key=lambda z: getattr(z, "numPlayer", 0))
+            best = candidate_zones[0]
             best_id = getattr(best, "zoneId", 0)
 
             if best_id != current_zone:

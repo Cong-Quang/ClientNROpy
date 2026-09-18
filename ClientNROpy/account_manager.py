@@ -10,13 +10,15 @@ import os
 import json
 import time
 import threading
-from typing import Optional, List, Dict, Any, Tuple, Union, Callable
+from typing import Optional, List, Dict, Any, Tuple, Union, Callable, Set
 
 from .client import ClientNRO
 from .proxy_manager import ProxyPool, ProxyConfig, parse_proxy
 from .logger import logger
 from .char import Char
 from .chat_vip import ChatVip
+from .player_data import PlayerData
+from .map_info import MapInfo
 
 
 DEFAULT_CONFIG_PATH = "accounts.json"
@@ -58,7 +60,7 @@ class AccountConfig:
         self.port: Optional[int] = port
         self.version: Optional[str] = version
         self.proxy: Optional[str] = proxy
-        self.auto_tasks: List[str] = auto_tasks or []
+        self.auto_tasks: List[str] = [t for t in (auto_tasks or []) if t and t.strip()]
         self.enabled: bool = enabled
         self.auto_reconnect: bool = auto_reconnect
 
@@ -98,53 +100,239 @@ class AccountInstance:
         self.reconnect_timer_end: float = 0.0
         self._reconnect_thread: Optional[threading.Thread] = None
         self._reconnect_cancel_event: threading.Event = threading.Event()
-        self.saved_auto_tasks: List[str] = list(config.auto_tasks)
+
+        # Lưu trữ trạng thái tác vụ auto và khu vực/bản đồ để khôi phục khi reconnect hoặc mất mạng đột ngột
+        self.saved_auto_tasks: List[str] = [t for t in (config.auto_tasks or []) if t and t.strip()]
+        self.saved_auto_state: Dict[str, Any] = {}
+        self.last_zone_id: int = -1
+        self.last_map_id: int = -1
+        self.saved_zone_id: int = -1
+        self.saved_map_id: int = -1
+        self.last_commands: List[str] = []
 
     def snapshot_active_autos(self) -> None:
-        """Lưu lại các tác vụ auto đang chạy trước khi mất kết nối."""
+        """
+        Lưu lại toàn bộ các tác vụ auto đang chạy, thông số cấu hình và vị trí map/zone.
+        Cập nhật liên tục để ngay cả khi ngắt kết nối đột ngột vẫn giữ nguyên vẹn dữ liệu.
+        """
         if not self.client:
             return
-        active = []
-        if getattr(self.client.boss_hunter, "is_enabled", False):
-            active.append("hunt")
-        if getattr(self.client.auto_quest, "is_running", False):
-            active.append("nvbm")
-        if getattr(self.client.combat_manager, "is_ak", False):
-            active.append("ak")
-        if getattr(self.client.combat_manager, "is_tansat", False):
-            active.append("ts")
-        if getattr(self.client.shuttle_manager, "is_running", False):
-            active.append("shuttle")
-        if getattr(self.client.auto_revive_manager, "is_enabled", False):
-            active.append("autohs")
-        if active:
-            merged = list(set(self.saved_auto_tasks + active))
-            self.saved_auto_tasks = merged
+
+        try:
+            # Ghi nhận Map và Zone hiện tại
+            if self.client.myChar and self.client.myChar.mapInfo:
+                curr_z = getattr(self.client.myChar.mapInfo, "zoneID", -1)
+                curr_m = getattr(self.client.myChar.mapInfo, "mapID", -1)
+                if curr_z >= 0:
+                    self.last_zone_id = curr_z
+                    self.saved_zone_id = curr_z
+                if curr_m >= 0:
+                    self.last_map_id = curr_m
+                    self.saved_map_id = curr_m
+
+            auto = getattr(self.client, "auto", None)
+            if not auto:
+                return
+
+            state: Dict[str, Any] = {}
+            active_tasks: List[str] = []
+
+            # 1. Tự đánh (AK)
+            if getattr(auto, "is_ak", False):
+                active_tasks.append("ak")
+                state["ak"] = True
+
+            # 2. Tàn sát (TS)
+            if getattr(auto, "is_tansat", False):
+                active_tasks.append("ts")
+                state["ts"] = {
+                    "mode": getattr(auto, "tansat_mode", "mob"),
+                    "target_mob_ids": list(getattr(auto, "target_mob_ids", set())),
+                    "target_mob_types": list(getattr(auto, "target_mob_types", set())),
+                    "avoid_super_mob": getattr(auto, "avoid_super_mob", True),
+                    "skill_id": getattr(auto, "tansat_skill_id", None),
+                    "combo_skills": list(getattr(auto, "combat_combo_skills", [])) if getattr(auto, "combat_combo_skills", None) else None,
+                }
+
+            # 3. Săn Boss (Hunt)
+            if getattr(auto, "is_boss_hunter_enabled", False):
+                active_tasks.append("hunt")
+                state["hunt"] = {
+                    "hunt_all": getattr(auto, "hunt_all", False),
+                    "target_bosses": list(getattr(auto, "target_bosses", set())),
+                    "auto_loot": getattr(auto, "auto_loot_boss", True),
+                    "auto_patrol": getattr(auto, "auto_patrol", False),
+                    "combo_skills": list(getattr(auto, "combat_combo_skills", [])) if getattr(auto, "combat_combo_skills", None) else None,
+                }
+
+            # 4. Úp đệ tử (TrainPet)
+            if hasattr(auto, "train_pet") and (getattr(auto.train_pet, "is_enabled", False) or getattr(auto.train_pet, "is_running", False)):
+                active_tasks.append("trainpet")
+                state["trainpet"] = {
+                    "mode": auto.train_pet.mode.name.lower(),
+                    "attack_mode": auto.train_pet.attack_mode.name.lower(),
+                }
+
+            # 5. Úp tân thủ / sơ sinh (TrainNewAcc)
+            if hasattr(auto, "train_new_acc") and (getattr(auto.train_new_acc, "is_enabled", False) or getattr(auto.train_new_acc, "is_running", False)):
+                active_tasks.append("trainacc")
+                state["trainacc"] = True
+
+            # 6. Nhiệm vụ bò mộng (NVBM)
+            if getattr(auto, "is_quest_enabled", False):
+                active_tasks.append("nvbm")
+                state["nvbm"] = True
+
+            # 7. Tự nhặt đồ & Dùng đậu & Né siêu quái
+            state["anhat"] = getattr(auto, "auto_pick", True)
+            state["cnn"] = getattr(auto, "pick_gem_only", False)
+            state["abf"] = getattr(auto, "auto_pean", True)
+            state["pean_threshold"] = getattr(auto, "pean_threshold", 0.3)
+            state["nsq"] = getattr(auto, "avoid_super_mob", True)
+
+            # 8. Tự hồi sinh (AutoHS)
+            if getattr(auto, "auto_revive", False):
+                active_tasks.append("autohs")
+                state["autohs"] = {
+                    "mode": getattr(auto, "revive_mode", "gem"),
+                }
+
+            # 9. Tự dùng Item định kỳ (UseItem)
+            if getattr(auto, "auto_use_item_enabled", False):
+                active_tasks.append("useitem")
+                state["useitem"] = {
+                    "item_id": getattr(auto, "auto_use_item_id", None),
+                    "interval": getattr(auto, "auto_use_interval_minutes", 10.0),
+                }
+
+            # 10. Shuttle (Chạy 2 map)
+            if getattr(auto, "is_shuttle_enabled", False):
+                active_tasks.append("shuttle")
+                state["shuttle"] = {
+                    "map_a": getattr(auto, "shuttle_map_a", None),
+                    "map_b": getattr(auto, "shuttle_map_b", None),
+                    "rounds": getattr(auto, "shuttle_rounds", 0),
+                }
+
+            self.saved_auto_state = state
+            self.saved_auto_tasks = active_tasks
+        except Exception:
+            pass
 
     def restore_active_autos(self) -> None:
-        """Khôi phục lại các tác vụ auto sau khi kết nối lại thành công."""
+        """Khôi phục lại đầy đủ toàn bộ tác vụ, thông số cấu hình và lệnh auto sau khi kết nối lại thành công."""
         if not self.client:
             return
-        tasks = list(self.saved_auto_tasks) if self.saved_auto_tasks else list(self.config.auto_tasks)
-        restored = []
-        if "hunt" in tasks:
-            self.client.start_auto_hunt()
-            restored.append("Hunt")
-        if "nvbm" in tasks:
-            self.client.start_auto_quest()
-            restored.append("NVBM")
-        if "ak" in tasks:
-            self.client.combat_manager.start_ak()
-            restored.append("AK")
-        if "ts" in tasks:
-            self.client.combat_manager.start_tansat()
-            restored.append("TS")
-        if "autohs" in tasks:
-            self.client.auto_revive_manager.enable()
-            restored.append("AutoHS")
-        if restored:
+
+        state = getattr(self, "saved_auto_state", {})
+        tasks = list(self.saved_auto_tasks) if getattr(self, "saved_auto_tasks", None) is not None else [t for t in self.config.auto_tasks if t and t.strip()]
+        auto = getattr(self.client, "auto", None)
+        if not auto:
+            return
+
+        restored: List[str] = []
+
+        try:
+            # Phục hồi cài đặt sinh tồn & nhặt đồ
+            if "anhat" in state:
+                auto.auto_pick = state["anhat"]
+            if "cnn" in state:
+                auto.pick_gem_only = state["cnn"]
+            if "abf" in state:
+                auto.auto_pean = state["abf"]
+            if "pean_threshold" in state:
+                auto.pean_threshold = state["pean_threshold"]
+            if "nsq" in state:
+                auto.avoid_super_mob = state["nsq"]
+
+            # 1. Tự đánh (AK)
+            if "ak" in tasks or state.get("ak"):
+                auto.start_ak()
+                restored.append("AK")
+
+            # 2. Tàn sát (TS)
+            if "ts" in tasks or "ts" in state:
+                ts_cfg = state.get("ts", {})
+                mode = ts_cfg.get("mode", "mob")
+                if ts_cfg.get("avoid_super_mob") is not None:
+                    auto.avoid_super_mob = ts_cfg["avoid_super_mob"]
+                if ts_cfg.get("target_mob_ids"):
+                    auto.target_mob_ids = set(ts_cfg["target_mob_ids"])
+                if ts_cfg.get("target_mob_types"):
+                    auto.target_mob_types = set(ts_cfg["target_mob_types"])
+                if ts_cfg.get("combo_skills"):
+                    auto.combat_combo_skills = list(ts_cfg["combo_skills"])
+                auto.start_tansat(mode=mode)
+                restored.append(f"TS({mode})")
+
+            # 3. Săn Boss (Hunt)
+            if "hunt" in tasks or "hunt" in state:
+                h_cfg = state.get("hunt", {})
+                if h_cfg.get("target_bosses"):
+                    auto.target_bosses = set(h_cfg["target_bosses"])
+                if h_cfg.get("hunt_all") is not None:
+                    auto.hunt_all = h_cfg["hunt_all"]
+                if h_cfg.get("auto_loot") is not None:
+                    auto.auto_loot_boss = h_cfg["auto_loot"]
+                if h_cfg.get("auto_patrol") is not None:
+                    auto.auto_patrol = h_cfg["auto_patrol"]
+                if h_cfg.get("combo_skills"):
+                    auto.combat_combo_skills = list(h_cfg["combo_skills"])
+                self.client.start_auto_hunt()
+                restored.append("Hunt")
+
+            # 4. Úp đệ tử (TrainPet)
+            if "trainpet" in tasks or "trainpet" in state:
+                tp_cfg = state.get("trainpet", {})
+                mode_str = tp_cfg.get("mode", "normal")
+                atk_str = tp_cfg.get("attack_mode", "mob")
+                auto.start_train_pet(mode_str)
+                auto.set_train_pet_attack_mode(atk_str)
+                restored.append(f"TrainPet({mode_str})")
+
+            # 5. Úp tân thủ / sơ sinh (TrainNewAcc)
+            if "trainacc" in tasks or state.get("trainacc"):
+                auto.start_train_new_account()
+                restored.append("TrainAcc")
+
+            # 6. Nhiệm vụ bò mộng (NVBM)
+            if "nvbm" in tasks or state.get("nvbm"):
+                self.client.start_auto_quest()
+                restored.append("NVBM")
+
+            # 7. Tự hồi sinh (AutoHS)
+            if "autohs" in tasks or "autohs" in state:
+                hs_cfg = state.get("autohs", {})
+                rev_mode = hs_cfg.get("mode", "gem")
+                self.client.set_auto_revive_mode(rev_mode)
+                self.client.auto_revive_manager.enable()
+                restored.append(f"AutoHS({rev_mode})")
+
+            # 8. Tự dùng Item (UseItem)
+            if "useitem" in tasks or "useitem" in state:
+                ui_cfg = state.get("useitem", {})
+                item_id = ui_cfg.get("item_id")
+                interval = ui_cfg.get("interval", 10.0)
+                if item_id is not None:
+                    self.client.start_auto_use_item(item_id, interval)
+                    restored.append(f"UseItem({item_id})")
+
+            # 9. Shuttle
+            if "shuttle" in tasks or "shuttle" in state:
+                st_cfg = state.get("shuttle", {})
+                map_a = st_cfg.get("map_a")
+                map_b = st_cfg.get("map_b")
+                rounds = st_cfg.get("rounds", 0)
+                if map_a is not None and map_b is not None:
+                    self.client.start_shuttle(map_a, map_b, rounds)
+                    restored.append(f"Shuttle({map_a}<->{map_b})")
+
+            if restored:
+                from .logger import logger
+                logger.system(f"Đã tự động khôi phục các lệnh/tác vụ: {', '.join(restored)}", account_tag=self.tag)
+        except Exception as ex:
             from .logger import logger
-            logger.system(f"Đã tự động kích hoạt tác vụ: {', '.join(restored)}", account_tag=self.tag)
+            logger.error(f"Lỗi khi khôi phục tác vụ auto: {ex}", account_tag=self.tag)
 
     @property
     def tag(self) -> str:
@@ -182,7 +370,9 @@ class AccountInstance:
     @property
     def proxy_str(self) -> str:
         if self.assigned_proxy:
-            return self.assigned_proxy.display_str
+            if isinstance(self.assigned_proxy, str):
+                return self.assigned_proxy
+            return getattr(self.assigned_proxy, "display_str", str(self.assigned_proxy))
         return "Trực tiếp"
 
     @property
@@ -190,16 +380,32 @@ class AccountInstance:
         if not self.client:
             return "N/A"
         active = []
-        if getattr(self.client.boss_hunter, "is_enabled", False):
+        auto = getattr(self.client, "auto", None)
+        if not auto:
+            return "None"
+        if getattr(auto, "is_boss_hunter_enabled", False):
             active.append("Hunt")
-        if getattr(self.client.auto_quest, "is_running", False):
+        if getattr(auto, "is_quest_enabled", False):
             active.append("NVBM")
-        if getattr(self.client.combat_manager, "is_ak", False):
+        if getattr(auto, "is_ak", False):
             active.append("AK")
-        if getattr(self.client.combat_manager, "is_tansat", False):
-            active.append("TS")
-        if getattr(self.client.shuttle_manager, "is_running", False):
+        if getattr(auto, "is_tansat", False):
+            mode = getattr(auto, "tansat_mode", "mob")
+            active.append(f"TS({mode})")
+        if hasattr(auto, "train_pet") and (getattr(auto.train_pet, "is_enabled", False) or getattr(auto.train_pet, "is_running", False)):
+            active.append(f"Pet({auto.train_pet.mode.name.lower()})")
+        if hasattr(auto, "train_new_acc") and (getattr(auto.train_new_acc, "is_enabled", False) or getattr(auto.train_new_acc, "is_running", False)):
+            active.append("NewAcc")
+        if getattr(auto, "is_shuttle_enabled", False):
             active.append("Shuttle")
+        if getattr(auto, "auto_use_item_enabled", False):
+            active.append(f"Item({auto.auto_use_item_id})")
+        if getattr(auto, "auto_revive", False):
+            active.append("HS")
+        if getattr(auto, "pick_gem_only", False):
+            active.append("CNN")
+        elif getattr(auto, "auto_pick", False):
+            active.append("Nhặt")
         return ", ".join(active) if active else "None"
 
 
@@ -430,7 +636,7 @@ class AccountManager:
                 "enabled": True,
                 "auto_reconnect": True,
                 "proxy": None,
-                "auto": ["hunt"],
+                "auto": [],
             },
             {
                 "username": "poopooi02",
@@ -438,7 +644,15 @@ class AccountManager:
                 "enabled": True,
                 "auto_reconnect": True,
                 "proxy": None,
-                "auto": ["hunt"],
+                "auto": [],
+            },
+            {
+                "username": "poopooi03",
+                "password": "02082003",
+                "enabled": True,
+                "auto_reconnect": True,
+                "proxy": None,
+                "auto": [],
             },
         ]
         try:
@@ -468,6 +682,7 @@ class AccountManager:
                 port=port,
                 version=version,
                 proxy=proxy,
+                auto_tasks=[],
             )
             assigned_proxy = self.proxy_pool.get_proxy_for_account(idx, proxy)
             inst = AccountInstance(cfg, assigned_proxy)
@@ -487,7 +702,7 @@ class AccountManager:
                         "enabled": inst.config.enabled,
                         "auto_reconnect": inst.config.auto_reconnect,
                         "proxy": inst.config.proxy,
-                        "auto": inst.config.auto_tasks or ["hunt"],
+                        "auto": [t for t in (inst.config.auto_tasks or []) if t and t.strip()],
                     })
             with open(target_path, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=2, ensure_ascii=False)
@@ -550,12 +765,13 @@ class AccountManager:
                     return False, f"Tài khoản '{u_clean}' đã tồn tại trong danh sách!", None
 
             idx = len(self.accounts)
+            clean_auto = [t for t in auto_tasks if t and t.strip()] if auto_tasks is not None else []
             cfg = AccountConfig(
                 acc_id=idx + 1,
                 username=u_clean,
                 password=p_clean,
                 proxy=proxy.strip() if proxy else None,
-                auto_tasks=auto_tasks if auto_tasks is not None else ["hunt"],
+                auto_tasks=clean_auto,
                 enabled=True,
                 auto_reconnect=self.auto_reconnect,
             )
@@ -730,6 +946,19 @@ class AccountManager:
             inst.client = client
 
             # Đăng ký các callback sự kiện
+            def _on_login_ok(players: List[PlayerData]):
+                if players:
+                    logger.system(f"Tự động chọn nhân vật '{players[0].name}'...", account_tag=inst.tag)
+                    client.selectChar(players[0].name)
+
+            def _on_map_info(m: MapInfo):
+                # Theo dõi Map và Zone liên tục theo thời gian thực phòng khi mất mạng đột ngột
+                if m.zoneID >= 0:
+                    inst.last_zone_id = m.zoneID
+                if m.mapID >= 0:
+                    inst.last_map_id = m.mapID
+                inst.snapshot_active_autos()
+
             def _on_char_info(c: Char):
                 inst.status = "ONLINE"
                 inst.login_time = time.time()
@@ -741,8 +970,39 @@ class AccountManager:
                     f"{prefix}: NV '{c.cName}' (ID {c.charID}, Map {c.mapInfo.mapID})",
                     account_tag=inst.tag,
                 )
-                # Tự động kích hoạt lại các tác vụ auto đã lưu
+
+                # Tự động quay lại khu cũ nếu có
+                target_zone = inst.saved_zone_id if inst.saved_zone_id >= 0 else inst.last_zone_id
+                target_map = inst.saved_map_id if inst.saved_map_id >= 0 else inst.last_map_id
+
+                if target_zone >= 0:
+                    def _restore_zone_worker():
+                        # Trễ 0.5s theo yêu cầu người dùng để client hoàn tất bắt tay và nạp map
+                        time.sleep(0.5)
+                        if not inst.client or not inst.client.isConnected() or inst.status != "ONLINE":
+                            return
+                        curr_z = getattr(inst.client.myChar.mapInfo, "zoneID", -1)
+                        curr_m = getattr(inst.client.myChar.mapInfo, "mapID", -1)
+                        if (target_map < 0 or curr_m == target_map) and target_zone >= 0 and curr_z != target_zone:
+                            logger.system(f"Đang tự động chuyển về khu cũ: Khu {target_zone} (từ Khu {curr_z})...", account_tag=inst.tag)
+                            inst.client.change_zone(target_zone)
+                            time.sleep(0.8)
+                            new_z = getattr(inst.client.myChar.mapInfo, "zoneID", -1)
+                            if new_z == target_zone:
+                                logger.system(f"Đã quay lại khu cũ thành công: Khu {target_zone}!", account_tag=inst.tag)
+                            elif new_z >= 0 and new_z != target_zone:
+                                inst.client.change_zone(target_zone)
+
+                    threading.Thread(target=_restore_zone_worker, daemon=True, name=f"RestoreZone-{inst.config.acc_id}").start()
+
+                # Tự động kích hoạt lại toàn bộ các tác vụ auto đã lưu
                 inst.restore_active_autos()
+
+                if c.mapInfo and c.mapInfo.zoneID >= 0:
+                    inst.last_zone_id = c.mapInfo.zoneID
+                if c.mapInfo and c.mapInfo.mapID >= 0:
+                    inst.last_map_id = c.mapInfo.mapID
+
                 if self.telegram_bot:
                     self.telegram_bot.notify_login_event(inst.tag, c.cName, c.mapInfo.mapID, is_reconnect=is_reconnected)
 
@@ -778,7 +1038,10 @@ class AccountManager:
 
                 if "nhiệm vụ" in text.lower():
                     if inst.client and inst.client.myChar:
-                        inst.client.myChar.task_name = text.strip()
+                        from .task import clean_task_name
+                        cleaned_task = clean_task_name(text.strip())
+                        if not inst.client.myChar.task and cleaned_task:
+                            inst.client.myChar.task_name = cleaned_task
                     logger.debug(f"[SERVER TASK] {text}", account_tag=inst.tag)
                     return
 
@@ -788,8 +1051,13 @@ class AccountManager:
                 if inst.is_manual_stopping:
                     return
                 inst.status = "DISCONNECTED"
-                # Ghi nhận lại các tác vụ auto đang bật để nối lại sẽ tiếp tục
+                # Ghi nhận lại toàn diện các tác vụ auto đang bật và vị trí trước khi luồng reconnect dọn dẹp client
                 inst.snapshot_active_autos()
+                if inst.saved_zone_id < 0 and inst.last_zone_id >= 0:
+                    inst.saved_zone_id = inst.last_zone_id
+                if inst.saved_map_id < 0 and inst.last_map_id >= 0:
+                    inst.saved_map_id = inst.last_map_id
+
                 if self.telegram_bot:
                     self.telegram_bot.notify_disconnect_event(inst.tag, self.reconnect_delay)
 
@@ -798,6 +1066,8 @@ class AccountManager:
                 if should_reconnect:
                     self._trigger_auto_reconnect(inst)
 
+            client.on_login_ok(_on_login_ok)
+            client.on_map_info(_on_map_info)
             client.on_char_info(_on_char_info)
             client.on_chat_vip(_on_vip_msg)
             client.on_server_message(_on_server_msg)
@@ -934,6 +1204,7 @@ class AccountManager:
         inst.is_manual_stopping = False
         inst._reconnect_cancel_event.set()  # Hủy đếm ngược nếu đang chờ reconnect
         if inst.client:
+            inst.snapshot_active_autos()
             try:
                 inst.client.disconnect()
             except Exception:
@@ -953,3 +1224,137 @@ class AccountManager:
                 a._reconnect_cancel_event.set()
         status_str = f"BẬT (Chờ {int(self.reconnect_delay)}s)" if enabled else "TẮT"
         logger.system(f"Chế độ Auto-Reconnect: {status_str}")
+
+    def disperse_zones_min(self, targets: Optional[List[AccountInstance]] = None) -> List[Dict[str, Any]]:
+        """
+        Phân tán toàn bộ tài khoản sang các khu ít người chơi nhất (khu min) sao cho:
+        1. Tất cả tài khoản tản ra đều, không đụng khu nhau (mỗi acc 1 khu riêng biệt nếu còn khu trống).
+        2. Nếu một tài khoản đang đứng ở khu đã là khu min (hoặc bằng min) và chưa bị acc khác trong đội chiếm,
+           thì giữ nguyên vị trí, không đổi đi đâu hết.
+        3. Phân nhóm theo từng map riêng biệt nếu các acc đang ở các map khác nhau.
+        Trả về danh sách kết quả chi tiết từng tài khoản.
+        """
+        if targets is None:
+            targets = [
+                a for a in self.accounts
+                if a.client and a.client.isConnected() and a.client.myChar and a.client.myChar.mapInfo
+            ]
+        else:
+            targets = [
+                a for a in targets
+                if a.client and a.client.isConnected() and a.client.myChar and a.client.myChar.mapInfo
+            ]
+
+        if not targets:
+            return []
+
+        # Phân nhóm tài khoản theo mapID
+        map_groups: Dict[int, List[AccountInstance]] = {}
+        for a in targets:
+            mid = getattr(a.client.myChar.mapInfo, "mapID", -1)
+            map_groups.setdefault(mid, []).append(a)
+
+        results: List[Dict[str, Any]] = []
+
+        for mid, acc_list in map_groups.items():
+            if not acc_list:
+                continue
+
+            # Dùng tài khoản đầu tiên trong map để lấy danh sách khu
+            first_client = acc_list[0].client
+            first_client.request_zones()
+            time.sleep(0.35)
+            zones = getattr(first_client.myChar.mapInfo, "zones", [])
+            if not zones:
+                time.sleep(0.25)
+                zones = getattr(first_client.myChar.mapInfo, "zones", [])
+
+            if not zones:
+                # Nếu không đọc được danh sách khu, fallback cho từng acc gọi hàm cá nhân
+                for a in acc_list:
+                    curr_z = getattr(a.client.myChar.mapInfo, "zoneID", -1)
+                    zid = a.client.change_to_least_populated_zone()
+                    results.append({
+                        "account": a,
+                        "map_id": mid,
+                        "map_name": getattr(a.client.myChar.mapInfo, "mapName", ""),
+                        "from_zone": curr_z,
+                        "to_zone": zid if zid is not None else curr_z,
+                        "changed": (zid is not None and zid != curr_z),
+                        "stayed": (zid == curr_z),
+                    })
+                continue
+
+            # Lọc các khu còn chỗ
+            valid_zones = [z for z in zones if getattr(z, "numPlayer", 0) < getattr(z, "maxPlayer", 15)]
+            if not valid_zones:
+                valid_zones = list(zones)
+
+            min_players = min(getattr(z, "numPlayer", 0) for z in valid_zones)
+
+            # Khởi tạo bảng đếm người chơi theo khu
+            # zone_occupancy: zid -> số người hiện tại (bao gồm các acc đã được xếp)
+            zone_occupancy: Dict[int, int] = {
+                getattr(z, "zoneId", 0): getattr(z, "numPlayer", 0) for z in valid_zones
+            }
+            claimed_zones: Set[int] = set()
+            assigned: Dict[AccountInstance, int] = {}
+            unassigned: List[AccountInstance] = []
+
+            # BƯỚC 1: Ưu tiên tài khoản đang đứng ở khu ĐÃ LÀ MIN ZONE
+            # Nếu khu đang đứng có số người <= min_players và chưa bị acc nào trước đó chiếm -> Giữ nguyên!
+            for a in acc_list:
+                curr_z = getattr(a.client.myChar.mapInfo, "zoneID", -1)
+                curr_obj = next((z for z in valid_zones if getattr(z, "zoneId", -1) == curr_z), None)
+                if (
+                    curr_obj is not None
+                    and getattr(curr_obj, "numPlayer", 0) <= min_players
+                    and curr_z not in claimed_zones
+                ):
+                    assigned[a] = curr_z
+                    claimed_zones.add(curr_z)
+                    zone_occupancy[curr_z] = zone_occupancy.get(curr_z, 0) + 1
+                else:
+                    unassigned.append(a)
+
+            # BƯỚC 2: Phân tán các tài khoản còn lại vào các khu vắng khác để KHÔNG ĐỤNG NHAU
+            for a in unassigned:
+                # Ứng viên ưu tiên: các khu chưa bị acc trong đội chiếm
+                unclaimed_cands = [z for z in valid_zones if getattr(z, "zoneId", 0) not in claimed_zones]
+                if unclaimed_cands:
+                    # Sắp xếp theo số người chơi tăng dần
+                    unclaimed_cands.sort(key=lambda z: (zone_occupancy.get(getattr(z, "zoneId", 0), 0), getattr(z, "zoneId", 0)))
+                    chosen_z = getattr(unclaimed_cands[0], "zoneId", 0)
+                else:
+                    # Nếu số acc nhiều hơn số khu, chọn khu có ít người nhất hiện tại
+                    all_cands = list(valid_zones)
+                    all_cands.sort(key=lambda z: (zone_occupancy.get(getattr(z, "zoneId", 0), 0), getattr(z, "zoneId", 0)))
+                    chosen_z = getattr(all_cands[0], "zoneId", 0)
+
+                assigned[a] = chosen_z
+                claimed_zones.add(chosen_z)
+                zone_occupancy[chosen_z] = zone_occupancy.get(chosen_z, 0) + 1
+
+            # BƯỚC 3: Thực thi chuyển khu cho các tài khoản cần chuyển
+            for a in acc_list:
+                curr_z = getattr(a.client.myChar.mapInfo, "zoneID", -1)
+                target_z = assigned.get(a, curr_z)
+                changed = False
+                if target_z != curr_z and target_z >= 0:
+                    a.client.change_zone(target_z)
+                    a.last_zone_id = target_z
+                    a.snapshot_active_autos()
+                    changed = True
+                    time.sleep(0.1)  # Giảm nghẽn mạng giữa các request
+
+                results.append({
+                    "account": a,
+                    "map_id": mid,
+                    "map_name": getattr(a.client.myChar.mapInfo, "mapName", ""),
+                    "from_zone": curr_z,
+                    "to_zone": target_z,
+                    "changed": changed,
+                    "stayed": not changed,
+                })
+
+        return results
