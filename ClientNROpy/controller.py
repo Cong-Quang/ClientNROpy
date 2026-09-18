@@ -414,6 +414,10 @@ class Controller(IMessageHandler):
                     except Exception:
                         pass
 
+                    old_task_id = getattr(self.myChar, "ctaskId", -1)
+                    old_task_index = getattr(self.myChar.task, "index", -1) if (self.myChar and self.myChar.task) else -1
+                    is_new_task = (self.myChar.task is None) or (old_task_id != task_id) or (old_task_index != index)
+
                     new_task = Task(
                         task_id=task_id,
                         index=index,
@@ -430,8 +434,19 @@ class Controller(IMessageHandler):
                     self.myChar.ctaskId = task_id
                     self.myChar.task_name = name
 
-                    from .logger import logger
-                    logger.system(f"Nhận nhiệm vụ: [{task_id}] {name} (Bước {index + 1}/{max(1, n_sub)})", account_tag=self.account_tag)
+                    if is_new_task:
+                        clean_name = name.strip()
+                        if "\n" in clean_name or "\r" in clean_name:
+                            lines = [l.strip() for l in clean_name.replace("\r", "").split("\n") if l.strip()]
+                            task_line = next((l for l in reversed(lines) if "nhiệm vụ" in l.lower()), None)
+                            if task_line:
+                                clean_name = task_line.split(":", 1)[-1].strip() if ":" in task_line else task_line.strip()
+                            else:
+                                filtered = [l for l in lines if not any(w in l.lower() for w in ("cấp vip", "coin:", "thẻ tháng", "quy lão", "_____", "nạp"))]
+                                clean_name = filtered[-1] if filtered else lines[0]
+
+                        from .logger import logger
+                        logger.system(f"Nhận nhiệm vụ: [{task_id}] {clean_name} (Bước {index + 1}/{max(1, n_sub)})", account_tag=self.account_tag)
 
                     for cb in self.on_task_callbacks:
                         try:

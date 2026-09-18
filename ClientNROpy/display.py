@@ -353,7 +353,7 @@ def print_cli_help():
     print("-" * 76)
     print("  [TỰ ĐỘNG KẾT NỐI & HỆ THỐNG]")
     print("  reconnect [on|off|delay|now]: Cấu hình và kết nối lại ngay lập tức")
-    print("  log off / mute / log on     : Tắt / Bật log nền trôi trên console để gõ lệnh yên tĩnh")
+    print("  quiet / log off / log on    : Chế độ yên tĩnh (Tắt/Bật log nền trôi để gõ lệnh không bị nhảy)")
     print("  cls / clear                 : Xóa sạch màn hình console")
     print("  telegram / tg               : Xem trạng thái kết nối Telegram Bot")
     print("  exit / quit                 : Đăng xuất và thoát chương trình")

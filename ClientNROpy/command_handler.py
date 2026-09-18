@@ -678,14 +678,20 @@ def execute_multi_command(
         return True, active_target
 
     # 4. Quản lý Log Console
-    if cmd in ("log", "mute"):
-        if cmd == "mute" or (args and args[0].lower() in ("off", "0", "mute", "false")):
+    if cmd in ("log", "mute", "quiet"):
+        if cmd in ("mute", "quiet") and (not args or args[0].lower() not in ("off", "0", "unmute", "false")):
             logger.set_muted(True)
-            print("[*] Đã TẮT toàn bộ log nền (Console yên tĩnh để gõ lệnh).")
+            print("[*] Đã BẬT chế độ yên tĩnh (TẮT toàn bộ log nền để gõ lệnh không bị trôi/nhảy màn hình).")
+            print("[*] Gõ 'quiet off' hoặc 'log on' để bật lại log nền.")
             return True, active_target
-        if args and args[0].lower() in ("on", "1", "unmute", "true"):
+        if (cmd in ("mute", "quiet") and args and args[0].lower() in ("off", "0", "unmute", "false")) or (cmd == "log" and args and args[0].lower() in ("on", "1", "unmute", "true")):
             logger.set_muted(False)
             print("[*] Đã BẬT lại log nền.")
+            return True, active_target
+        if cmd == "log" and args and args[0].lower() in ("off", "0", "mute", "quiet", "false"):
+            logger.set_muted(True)
+            print("[*] Đã TẮT toàn bộ log nền (Console yên tĩnh để gõ lệnh).")
+            print("[*] Gõ 'log on' hoặc 'quiet off' để bật lại.")
             return True, active_target
         if len(args) >= 2:
             sub = args[0].lower()
@@ -698,7 +704,7 @@ def execute_multi_command(
         print(f"[*] Trạng thái Log: {'TẮT [MUTED]' if logger.muted else 'BẬT [ACTIVE]'}")
         for ch, en in logger.channels.items():
             print(f"    - Kênh {ch.upper():<8}: {'BẬT' if en else 'TẮT'}")
-        print("    Cú pháp: log on | log off | log chat on/off | log boss on/off")
+        print("    Cú pháp: quiet | log on | log off | log chat on/off | log boss on/off")
         return True, active_target
 
     # 5. Xem danh sách / trạng thái tài khoản

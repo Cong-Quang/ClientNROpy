@@ -774,9 +774,13 @@ class AccountManager:
                 ]
                 if any(phrase in text for phrase in spam_phrases):
                     logger.debug(f"[SERVER COOLDOWN] {text}", account_tag=inst.tag)
+                    return
+
                 if "nhiệm vụ" in text.lower():
                     if inst.client and inst.client.myChar:
                         inst.client.myChar.task_name = text.strip()
+                    logger.debug(f"[SERVER TASK] {text}", account_tag=inst.tag)
+                    return
 
                 logger.system(f"[SERVER] {text}", account_tag=inst.tag)
 

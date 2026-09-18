@@ -41,12 +41,16 @@ def interactive_cli(account_manager, default_target: Optional[Union[int, str]] =
             else:
                 prompt = f"nro[acc:{active_target} | ?]> "
 
+        logger.set_prompt(prompt)
         try:
             line = input(prompt).strip()
         except (EOFError, KeyboardInterrupt):
+            logger.clear_prompt()
             print("\n[*] Đang thoát giao diện dòng lệnh...")
             account_manager.stop_all()
             break
+        finally:
+            logger.clear_prompt()
 
         if not line:
             continue
