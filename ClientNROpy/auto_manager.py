@@ -821,9 +821,22 @@ class AutoManager:
         ki_ratio = my_char.cMP / max(1, my_char.cMPFull)
 
         if hp_ratio <= self.pean_threshold or ki_ratio <= self.pean_threshold:
-            if my_char.magicTree and my_char.magicTree.currPeas > 0:
-                svc = self._service()
-                if svc:
+            svc = self._service()
+            if not svc:
+                return
+
+            # 1. Ưu tiên ăn hạt đậu thần đang có sẵn trong hành trang Balo
+            pean = my_char.get_first_pean_item() if hasattr(my_char, "get_first_pean_item") else None
+            if pean is not None:
+                svc.useItem(0, 1, -1, pean.template_id)
+                time.sleep(0.2)
+                return
+
+            # 2. Nếu trong balo hết đậu nhưng đang ở nhà và cây đậu có đậu chín
+            if my_char.magicTree and getattr(my_char.magicTree, "currPeas", 0) > 0:
+                curr_map = getattr(my_char.mapInfo, "mapID", -1)
+                # Map nhà: 21 (Trái đất), 22 (Namếc), 23 (Xayda)
+                if curr_map in (21, 22, 23):
                     svc.magicTree(2)
                     time.sleep(0.2)
 
@@ -1537,7 +1550,7 @@ class AutoManager:
         norm_target = normalize_str(self.current_boss.name)
 
         # 1. Quét trong người chơi (boss dạng Char)
-        for ch in my_char.mapInfo.chars.values():
+        for ch in list(my_char.mapInfo.chars.values()):
             if ch.charID != my_char.charID and not ch.is_dead:
                 norm_c = normalize_str(ch.cName)
                 if self.current_boss.name == "Boss Tuần Tra":
@@ -1547,7 +1560,7 @@ class AutoManager:
                     return ch
 
         # 2. Quét trong quái (boss dạng Mob)
-        for m in my_char.mapInfo.mobs.values():
+        for m in list(my_char.mapInfo.mobs.values()):
             if getattr(m, "hp", 0) > 0 and getattr(m, "status", 0) not in (0, 1):
                 norm_m = normalize_str(getattr(m, "template_name", ""))
                 if self.current_boss.name == "Boss Tuần Tra":
@@ -2244,14 +2257,88 @@ class AutoManager:
         return self.is_quest_enabled
 
     @property
-    def is_enabled(self) -> bool:
-        """Alias cho BossHunter."""
-        return self.is_boss_hunter_enabled
+    def auto_attack_enabled(self) -> bool:
+        """Alias cho is_ak."""
+        return self.is_ak
+
+    @property
+    def auto_pickup(self) -> bool:
+        """Alias cho auto_pick."""
+        return self.auto_pick
+
+    @property
+    def auto_train_pet_enabled(self) -> bool:
+        """Alias cho train_pet.is_enabled."""
+        return bool(getattr(self, "train_pet", None) and getattr(self.train_pet, "is_enabled", False))
+
+    @property
+    def auto_train_enabled(self) -> bool:
+        """Alias cho train_new_acc.is_enabled."""
+        return bool(getattr(self, "train_new_acc", None) and getattr(self.train_new_acc, "is_enabled", False))
 
     @property
     def is_enabled(self) -> bool:
+        """Kiểm tra xem có bất kỳ tính năng tự động nào đang bật hay không."""
+        return (
+            self.is_boss_hunter_enabled
+            or self.auto_revive
+            or self.is_quest_enabled
+            or self.is_ak
+            or self.is_tansat
+            or self.is_shuttle_enabled
+            or self.auto_train_pet_enabled
+            or self.auto_train_enabled
+            or self.auto_pick
+            or self.auto_pean
+            or self.auto_use_item_enabled
+        )
+
+    @property
+    def is_revive_enabled(self) -> bool:
         """Alias cho AutoReviveManager.is_enabled."""
         return self.auto_revive
+
+    def clear(self) -> None:
+        """Xóa toàn bộ lịch sử boss đã lưu (khắc phục lỗi khi gọi client.boss_manager.clear())."""
+        with self._lock:
+            self.list_bosses.clear()
+
+    def clear_bosses(self) -> None:
+        """Bí danh của clear()."""
+        self.clear()
+
+    def get_active_summary_list(self) -> List[str]:
+        """Trả về danh sách tên các module auto đang hoạt động."""
+        active = []
+        if self.is_boss_hunter_enabled:
+            active.append("Săn Boss")
+        if self.is_ak:
+            active.append("Tự Đánh")
+        if getattr(self, "is_tansat", False):
+            mode_str = f" ({self.tansat_mode})" if getattr(self, "tansat_mode", None) else ""
+            active.append(f"Tàn Sát{mode_str}")
+        if self.auto_pick:
+            active.append("Tự Nhặt")
+        if self.auto_pean:
+            active.append("Tự Dùng Đậu")
+        if self.auto_revive:
+            active.append("Tự Hồi Sinh")
+        if self.is_quest_enabled:
+            active.append("Auto Bò Mộng")
+        if self.is_shuttle_enabled:
+            active.append("Auto Đi Lại")
+        if self.auto_train_pet_enabled:
+            active.append("Úp Đệ")
+        if self.auto_train_enabled:
+            active.append("NV Tân Thủ")
+        if self.auto_use_item_enabled:
+            active.append("Dùng Vật Phẩm")
+        return active
+
+    def get_active_summary_str(self) -> str:
+        """Trả về chuỗi tổng hợp các tính năng auto đang hoạt động."""
+        active = self.get_active_summary_list()
+        return ", ".join(active) if active else "Không"
 
     @property
     def mode(self) -> str:

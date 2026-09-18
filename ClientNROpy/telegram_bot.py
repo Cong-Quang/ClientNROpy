@@ -29,6 +29,7 @@ from typing import Optional, List, Dict, Any, Set, Union
 from .logger import logger
 from .char import Char
 from .item import Item
+from .pet import PET_ACTION_MAP, PET_STATUS_NAMES
 from .game_data import (
     COMMON_ITEM_NAMES,
     ITEM_NAMES,
@@ -1006,17 +1007,8 @@ class TelegramAIBot:
 
             # Cấu hình auto
             if a.client:
-                cbm = a.client.combat_manager
-                bh = a.client.boss_hunter
-                autos = []
-                if bh.is_hunting: autos.append("Săn Boss")
-                if cbm.is_ak: autos.append("Tự Đánh")
-                if cbm.is_tansat: autos.append(f"Tàn Sát ({cbm.tansat_mode})")
-                if cbm.auto_pick: autos.append("Tự Nhặt")
-                if cbm.auto_pean: autos.append("Tự Dùng Đậu")
-                if a.client.auto_revive_manager.is_enabled: autos.append("Tự Hồi Sinh")
-                if a.client.auto_quest_manager.is_running: autos.append("Auto Bò Mộng")
-                parts.append(f"Auto đang bật: {', '.join(autos) if autos else 'Không'}")
+                auto_str = a.client.auto.get_active_summary_str()
+                parts.append(f"Auto đang bật: {auto_str}")
 
             lines.append("> " + " | ".join(parts))
 
@@ -1117,26 +1109,9 @@ class TelegramAIBot:
                     map_name = char.mapInfo.mapName if (char.mapInfo and char.mapInfo.mapName) else "Chưa rõ"
                     zone_id = char.mapInfo.zoneID if char.mapInfo else -1
 
-                    cbm = inst.client.combat_manager
-                    bh = inst.client.boss_hunter
-                    auto_list = []
-                    if getattr(bh, "is_hunting", False):
-                        auto_list.append("Săn Boss")
-                    if cbm.is_ak:
-                        auto_list.append("Tự Đánh")
-                    if cbm.is_tansat:
-                        auto_list.append(f"Tàn Sát ({cbm.tansat_mode})")
-                    if cbm.auto_pick:
-                        auto_list.append("Tự Nhặt")
-                    if cbm.auto_pean:
-                        auto_list.append("Tự Dùng Đậu")
-                    if inst.client.auto_revive_manager.is_enabled:
-                        auto_list.append("Tự Hồi Sinh")
-                    if inst.client.auto.train_pet.is_enabled:
-                        auto_list.append("Úp Đệ")
-                    if inst.client.auto.train_new_acc.is_enabled:
-                        auto_list.append("NV Tân Thủ")
-                    auto_str = ", ".join(auto_list) if auto_list else "Không bật"
+                    auto_str = inst.client.auto.get_active_summary_str()
+                    if auto_str == "Không":
+                        auto_str = "Không bật"
 
                     card = (
                         f"> *ĐÃ CHỌN TÀI KHOẢN: Acc #{acc_id} ({cname})* Đang online\n"
@@ -1694,42 +1669,32 @@ class TelegramAIBot:
             self.send_message(chat_id, "[!] Chưa có tài khoản nào được nạp.")
             return
 
-        action_map = {
-            "0": 0, "follow": 0, "dtheo": 0, "theo": 0,
-            "1": 1, "protect": 1, "baove": 1, "bv": 1,
-            "2": 2, "attack": 2, "tancong": 2, "tc": 2, "danh": 2,
-            "3": 3, "home": 3, "venha": 3, "nha": 3,
-            "4": 4, "fuse": 4, "hopthe": 4, "ht": 4,
-            "5": 5, "porata": 5, "bongtai": 5,
-        }
-
         # Nếu tham số thứ nhất là hành động (ví dụ /pet attack hoặc /pet fuse)
-        if target_arg and target_arg.lower() in action_map:
-            act_code = action_map[target_arg.lower()]
+        if target_arg and target_arg.lower() in PET_ACTION_MAP:
+            act_code = PET_ACTION_MAP[target_arg.lower()]
             connected = [a for a in self.account_manager.accounts if a.client and a.client.isConnected()]
             if not connected:
                 self.send_message(chat_id, "[!] Không có tài khoản nào đang Online để đổi trạng thái đệ.")
                 return
             for a in connected:
                 a.client.change_pet_status(act_code)
-            st_names = {0: "Đi theo", 1: "Bảo vệ", 2: "Tấn công", 3: "Về nhà", 4: "Hợp thể", 5: "Hợp thể Porata"}
-            self.send_message(chat_id, f"[=] Đã chuyển trạng thái đệ tử sang: *{st_names.get(act_code)}* cho {len(connected)} tài khoản!")
+            self.send_message(chat_id, f"[=] Đã chuyển trạng thái đệ tử sang: *{PET_STATUS_NAMES.get(act_code)}* cho {len(connected)} tài khoản!")
             return
 
         # Nếu có target_arg và action_arg (ví dụ /pet 1 attack)
-        if action_arg and action_arg.lower() in action_map:
-            act_code = action_map[action_arg.lower()]
-            st_names = {0: "Đi theo", 1: "Bảo vệ", 2: "Tấn công", 3: "Về nhà", 4: "Hợp thể", 5: "Hợp thể Porata"}
+        if action_arg and action_arg.lower() in PET_ACTION_MAP:
+            act_code = PET_ACTION_MAP[action_arg.lower()]
+            st_name = PET_STATUS_NAMES.get(act_code, "Đã đổi")
             if target_arg.lower() in ("all", "tatca", "*"):
                 connected = [a for a in self.account_manager.accounts if a.client and a.client.isConnected()]
                 for a in connected:
                     a.client.change_pet_status(act_code)
-                self.send_message(chat_id, f"[=] Đã chuyển trạng thái đệ tử sang: *{st_names.get(act_code)}* cho TOÀN BỘ tài khoản!")
+                self.send_message(chat_id, f"[=] Đã chuyển trạng thái đệ tử sang: *{st_name}* cho TOÀN BỘ tài khoản!")
                 return
             inst = self._resolve_account(target_arg)
             if inst and inst.client:
                 inst.client.change_pet_status(act_code)
-                self.send_message(chat_id, f"[=] [{inst.tag}] Đã chuyển trạng thái đệ tử sang: *{st_names.get(act_code)}*!")
+                self.send_message(chat_id, f"[=] [{inst.tag}] Đã chuyển trạng thái đệ tử sang: *{st_name}*!")
                 return
             else:
                 self.send_message(chat_id, f"[x] Không tìm thấy tài khoản '{target_arg}'.")

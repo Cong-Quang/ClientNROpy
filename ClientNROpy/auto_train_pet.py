@@ -404,7 +404,7 @@ class AutoTrainPet:
         char = getattr(self.client, "myChar", None)
         if not char:
             return None
-        for mob in char.mapInfo.mobs.values():
+        for mob in list(char.mapInfo.mobs.values()):
             if getattr(mob, "levelBoss", 0) > 0 and getattr(mob, "hp", 0) > 0 and not getattr(mob, "isMobMe", False):
                 return mob
         return None
@@ -418,7 +418,7 @@ class AutoTrainPet:
         best_mob = None
         min_dist = float("inf")
 
-        for mob in char.mapInfo.mobs.values():
+        for mob in list(char.mapInfo.mobs.values()):
             if getattr(mob, "status", 0) in (0, 1):
                 continue
             if getattr(mob, "hp", 0) <= 0 or getattr(mob, "isMobMe", False) or getattr(mob, "levelBoss", 0) != 0:

@@ -322,7 +322,7 @@ def print_map_and_zones(map_info: MapInfo):
     if not map_info.chars:
         print("  Không có người chơi khác.")
     else:
-        for pid, c in map_info.chars.items():
+        for pid, c in list(map_info.chars.items()):
             print(
                 f"  {c.cName} "
                 f"(ID: {pid}) | "

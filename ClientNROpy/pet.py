@@ -48,3 +48,15 @@ class Pet:
             return "<Pet: Chưa có đệ tử>"
         return (f"<Pet Name='{self.cName}' Status='{self.statusName}' "
                 f"HP={self.cHP:,}/{self.cHPFull:,} Dam={self.cDamFull:,} Power={self.cPower:,}>")
+
+
+PET_STATUS_NAMES = Pet.STATUS_NAMES
+
+PET_ACTION_MAP = {
+    "0": 0, "follow": 0, "dtheo": 0, "theo": 0, "di theo": 0, "đi theo": 0,
+    "1": 1, "protect": 1, "baove": 1, "bv": 1, "bao ve": 1, "bảo vệ": 1,
+    "2": 2, "attack": 2, "tancong": 2, "tc": 2, "danh": 2, "tan cong": 2, "tấn công": 2,
+    "3": 3, "home": 3, "venha": 3, "nha": 3, "ve nha": 3, "về nhà": 3,
+    "4": 4, "fuse": 4, "hopthe": 4, "ht": 4, "hop the": 4, "hợp thể": 4,
+    "5": 5, "porata": 5, "bongtai": 5, "bt": 5, "bong tai": 5, "bông tai": 5,
+}

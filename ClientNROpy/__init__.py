@@ -48,6 +48,9 @@ from .boss import Boss
 from .auto_manager import AutoManager
 from .boss_manager import BossManager
 from .boss_hunter import BossHunter
+from .combat_manager import CombatManager
+from .auto_revive_manager import AutoReviveManager
+from .auto_use_item_manager import AutoUseItemManager
 from .auto_quest_bomong import AutoQuest, AutoState, QuestInfo
 from .task import Task
 from .auto_train_pet import AutoTrainPet, AutoTrainPetMode, AutoTrainPetAttackMode
@@ -132,6 +135,8 @@ __all__ = [
     "BossManager",
     "BossHunter",
     "CombatManager",
+    "AutoReviveManager",
+    "AutoUseItemManager",
     "AutoQuest",
     "AutoState",
     "QuestInfo",

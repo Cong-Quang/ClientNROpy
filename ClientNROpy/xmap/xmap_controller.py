@@ -98,6 +98,11 @@ class XmapController:
             except Exception:
                 pass
 
+    @property
+    def is_running(self) -> bool:
+        """Alias cho is_acting."""
+        return self.is_acting
+
     def get_status(self) -> Dict:
         """Lấy thông tin trạng thái hoạt động hiện tại của Xmap."""
         curr_map = self.client.myChar.mapInfo.mapID

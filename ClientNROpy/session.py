@@ -135,10 +135,13 @@ class Session_ME(ISession):
         return res if res < 128 else res - 256
 
     def onRecieveMsg(self, msg: Message) -> None:
-        with self._lock:
-            self.recieveMsg.append(msg)
         if self.messageHandler:
             self.messageHandler.onMessage(msg)
+        else:
+            with self._lock:
+                self.recieveMsg.append(msg)
+                if len(self.recieveMsg) > 50:
+                    self.recieveMsg.pop(0)
 
     def update(self) -> None:
         """Cập nhật hàng đợi tin nhắn."""

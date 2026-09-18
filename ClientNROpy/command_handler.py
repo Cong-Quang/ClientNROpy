@@ -19,6 +19,7 @@ import difflib
 from typing import Optional, Union, Tuple, List
 
 from .client import ClientNRO
+from .pet import PET_ACTION_MAP, PET_STATUS_NAMES
 from .logger import logger
 from .display import (
     print_cli_help,
@@ -177,21 +178,12 @@ def execute_client_command(client: ClientNRO, line: str) -> bool:
             print(f"  [{i+1:02d}] {it_name} (ID: {it.template_id}) x{it.quantity:<4}{opt_str}")
 
     elif cmd in ("pet", "detu"):
-        action_map = {
-            "0": 0, "follow": 0, "dtheo": 0, "theo": 0,
-            "1": 1, "protect": 1, "baove": 1, "bv": 1,
-            "2": 2, "attack": 2, "tancong": 2, "tc": 2, "danh": 2,
-            "3": 3, "home": 3, "venha": 3, "nha": 3,
-            "4": 4, "fuse": 4, "hopthe": 4, "ht": 4,
-            "5": 5, "porata": 5, "bongtai": 5,
-        }
         if not args:
             print_pet_info(client.myChar.pet)
-        elif args[0].lower() in action_map:
-            act_code = action_map[args[0].lower()]
-            client.change_pet_status(act_code)
-            st_names = {0: "Đi theo", 1: "Bảo vệ", 2: "Tấn công", 3: "Về nhà", 4: "Hợp thể", 5: "Hợp thể Porata"}
-            logger.system(f"Đã chuyển trạng thái đệ tử sang: {st_names.get(act_code)}", account_tag=tag)
+        elif args[0].lower() in PET_ACTION_MAP:
+            act_code = PET_ACTION_MAP[args[0].lower()]
+            client.set_pet_status(act_code)
+            logger.system(f"Đã chuyển trạng thái đệ tử sang: {PET_STATUS_NAMES.get(act_code, 'Đã đổi')}", account_tag=tag)
         else:
             print("Cú pháp: pet [follow|protect|attack|home|fuse|porata|0-5]")
 
@@ -1087,21 +1079,12 @@ def execute_multi_command(
         return True, active_target
 
     if cmd in ("pet", "detu"):
-        action_map = {
-            "0": 0, "follow": 0, "dtheo": 0, "theo": 0,
-            "1": 1, "protect": 1, "baove": 1, "bv": 1,
-            "2": 2, "attack": 2, "tancong": 2, "tc": 2, "danh": 2,
-            "3": 3, "home": 3, "venha": 3, "nha": 3,
-            "4": 4, "fuse": 4, "hopthe": 4, "ht": 4,
-            "5": 5, "porata": 5, "bongtai": 5,
-        }
-        if args and args[0].lower() in action_map:
-            act_code = action_map[args[0].lower()]
+        if args and args[0].lower() in PET_ACTION_MAP:
+            act_code = PET_ACTION_MAP[args[0].lower()]
             connected_accs = [a for a in account_manager.accounts if a.client and a.client.isConnected()]
             for a in connected_accs:
-                a.client.change_pet_status(act_code)
-            st_names = {0: "Đi theo", 1: "Bảo vệ", 2: "Tấn công", 3: "Về nhà", 4: "Hợp thể", 5: "Hợp thể Porata"}
-            print(f"[*] Đã chuyển trạng thái đệ tử sang: {st_names.get(act_code)} cho {len(connected_accs)} tài khoản.")
+                a.client.set_pet_status(act_code)
+            print(f"[*] Đã chuyển trạng thái đệ tử sang: {PET_STATUS_NAMES.get(act_code, 'Đã đổi')} cho {len(connected_accs)} tài khoản.")
             return True, active_target
 
     # 7e. Tra cứu vật phẩm toàn đội (item <id|tên> all hoặc khi không chọn acc nào)

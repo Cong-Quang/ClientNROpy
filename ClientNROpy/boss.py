@@ -127,6 +127,15 @@ class Boss:
             f"{zone_part}{time_part}"
         )
 
+    def get(self, key: str, default: Any = None) -> Any:
+        """Truy xuất an toàn thuộc tính theo dạng dict-like (tránh AttributeError)."""
+        return getattr(self, key, default)
+
+    def __getitem__(self, key: str) -> Any:
+        if hasattr(self, key):
+            return getattr(self, key)
+        raise KeyError(key)
+
     def to_dict(self) -> Dict[str, Any]:
         """Chuyển đổi thông tin Boss thành dictionary."""
         return {

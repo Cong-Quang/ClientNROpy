@@ -711,7 +711,7 @@ class AutoTrainNewAccount:
         self.my_min_hp = 60
         self.my_min_mp = 20
 
-        for ch in char.mapInfo.chars.values():
+        for ch in list(char.mapInfo.chars.values()):
             if getattr(ch, "cName", "") == "Karin" and getattr(ch, "cTypePk", 0) == 3:
                 dist = char.distance_to(ch.cx, ch.cy)
                 if dist > 50:
@@ -730,7 +730,7 @@ class AutoTrainNewAccount:
         self.my_min_hp = 100
         self.my_min_mp = 20
 
-        for ch in char.mapInfo.chars.values():
+        for ch in list(char.mapInfo.chars.values()):
             c_name = getattr(ch, "cName", "")
             if ("Tao" in c_name or "T77" in c_name or "Mercenary" in c_name) and getattr(ch, "cTypePk", 0) == 3:
                 dist = char.distance_to(ch.cx, ch.cy)
@@ -748,7 +748,7 @@ class AutoTrainNewAccount:
             return None
         best = None
         min_d = float("inf")
-        for mob in char.mapInfo.mobs.values():
+        for mob in list(char.mapInfo.mobs.values()):
             if getattr(mob, "status", 0) in (0, 1) or getattr(mob, "hp", 0) <= 0 or getattr(mob, "isMobMe", False):
                 continue
             max_hp = getattr(mob, "maxHp", getattr(mob, "hp", 0))

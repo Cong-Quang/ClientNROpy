@@ -49,7 +49,7 @@ class MapInfo:
     def find_mob(self, query: Optional[Union[int, str]] = None, from_x: Optional[int] = None, from_y: Optional[int] = None) -> Optional[Mob]:
         """Tìm quái vật trong map theo mobId, templateId, tên hoặc khoảng cách gần nhất."""
         import math
-        alive_mobs = [m for m in self.mobs.values() if getattr(m, "status", 0) not in (0, 1) and getattr(m, "hp", 0) > 0]
+        alive_mobs = [m for m in list(self.mobs.values()) if getattr(m, "status", 0) not in (0, 1) and getattr(m, "hp", 0) > 0]
         if not alive_mobs:
             return None
 
@@ -75,7 +75,7 @@ class MapInfo:
     def find_char(self, query: Optional[Union[int, str]] = None, exclude_char_id: Optional[int] = None, from_x: Optional[int] = None, from_y: Optional[int] = None) -> Optional["Char"]:
         """Tìm người chơi trong map theo charID, tên hoặc khoảng cách gần nhất."""
         import math
-        candidates = [c for c in self.chars.values() if exclude_char_id is None or c.charID != exclude_char_id]
+        candidates = [c for c in list(self.chars.values()) if exclude_char_id is None or c.charID != exclude_char_id]
         if not candidates:
             return None
 

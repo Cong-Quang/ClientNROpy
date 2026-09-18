@@ -187,6 +187,10 @@ class ClientNRO:
         """
         self.service.petStatus(status)
 
+    def change_pet_status(self, status: int) -> None:
+        """Thay đổi trạng thái đệ tử (alias cho set_pet_status)."""
+        self.set_pet_status(status)
+
     def request_magic_tree(self, action: int = 1) -> None:
         """
         Tương tác cây đậu thần (cmd -34).
@@ -358,7 +362,7 @@ class ClientNRO:
                     time.sleep(0.6)
                     start_t = time.time()
                     timeout = 180.0
-                    while getattr(self.xmap_controller, "is_running", False) and (time.time() - start_t < timeout):
+                    while (getattr(self.xmap_controller, "is_acting", False) or getattr(self.xmap_controller, "is_running", False)) and (time.time() - start_t < timeout):
                         time.sleep(0.4)
                     time.sleep(1.0)
                 elif head == "zone" and len(parts) > 1 and parts[1].lower() in ("min", "least", "itnguoi", "vang"):
@@ -432,6 +436,10 @@ class ClientNRO:
     def get_alive_bosses(self) -> List[Boss]:
         """Lấy danh sách các Boss hiện đang còn sống."""
         return self.boss_manager.get_alive_bosses()
+
+    def clear_bosses(self) -> None:
+        """Xóa toàn bộ lịch sử Boss đã ghi nhận."""
+        self.boss_manager.clear()
 
     def go_to_boss(self, target: Union[int, str]) -> Tuple[bool, str]:
         """
