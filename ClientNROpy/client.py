@@ -548,6 +548,16 @@ class ClientNRO:
         """Cài đặt bộ 3 skill xoay vòng để pem boss / tàn sát."""
         return self.auto.set_combo_skills(skill_ids)
 
+    def refresh_char_info(self) -> None:
+        """Chủ động gửi yêu cầu cập nhật thông tin nhân vật và đệ tử mới nhất từ máy chủ."""
+        try:
+            if self.isConnected() and self.myChar and self.myChar.charID != 0:
+                self.service.getPlayerMenu(self.myChar.charID)
+                if getattr(self.myChar, "pet", None) and getattr(self.myChar.pet, "isHavePet", False):
+                    self.service.petInfo()
+        except Exception:
+            pass
+
     # --------------------------------------------------------------------------
     # AUTO NHIỆM VỤ BÒ MỘNG HẰNG NGÀY (AUTO QUEST)
     # --------------------------------------------------------------------------

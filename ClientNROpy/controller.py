@@ -925,6 +925,90 @@ class Controller(IMessageHandler):
                 return
 
             # ------------------------------------------------------------------
+            # 18a. CỘNG SỨC MẠNH & TIỀM NĂNG KHI ĐÁNH QUÁI (cmd -3: UP_POWER/TIEMNANG)
+            # ------------------------------------------------------------------
+            if cmd == -3:
+                try:
+                    b_type = msg.reader().readByte()
+                    val = msg.reader().readInt()
+                    char = self.myChar
+                    if b_type == 0:
+                        char.cPower += val
+                    elif b_type == 1:
+                        char.cTiemNang += val
+                    elif b_type == 2:
+                        char.cPower += val
+                        char.cTiemNang += val
+                    if self.debug:
+                        from .logger import logger
+                        logger.debug(f"[Controller] UP_POWER: type={b_type}, val=+{val:,} -> Power={char.cPower:,}, TN={char.cTiemNang:,}", account_tag=self.account_tag)
+                except Exception as ex:
+                    if self.debug:
+                        from .logger import logger
+                        logger.debug(f"[Controller] cmd -3 parse error: {ex}", account_tag=self.account_tag)
+                return
+
+            # ------------------------------------------------------------------
+            # 18b. THÔNG TIN SỨC MẠNH / MENU NGƯỜI CHƠI (cmd -79: PLAYER_MENU)
+            # ------------------------------------------------------------------
+            if cmd == -79:
+                try:
+                    char_id = msg.reader().readInt()
+                    power = msg.reader().readLong()
+                    str_level = msg.reader().readUTF()
+                    char = self.myChar
+                    if char_id == char.charID:
+                        char.cPower = power
+                        char.currStrLevel = str_level
+                        if self.debug:
+                            from .logger import logger
+                            logger.debug(f"[Controller] PlayerMenu Sync: Power={power:,} ({str_level})", account_tag=self.account_tag)
+                    elif char_id in char.mapInfo.chars:
+                        target = char.mapInfo.chars[char_id]
+                        target.cPower = power
+                        target.currStrLevel = str_level
+                except Exception as ex:
+                    if self.debug:
+                        from .logger import logger
+                        logger.debug(f"[Controller] cmd -79 parse error: {ex}", account_tag=self.account_tag)
+                return
+
+            # ------------------------------------------------------------------
+            # 18c. CỘNG VÀNG / YÊN RƠI (cmd -1, -2, 95)
+            # ------------------------------------------------------------------
+            if cmd in (-1, 95):
+                try:
+                    num = msg.reader().readInt()
+                    self.myChar.xu += num
+                except Exception:
+                    pass
+                return
+
+            if cmd == -2:
+                try:
+                    num = msg.reader().readInt()
+                    # yen += num
+                except Exception:
+                    pass
+                return
+
+            # ------------------------------------------------------------------
+            # 18d. NHÂN VẬT TỬ VONG / MẤT SỨC MẠNH (cmd -17: ME_DIE)
+            # ------------------------------------------------------------------
+            if cmd == -17:
+                try:
+                    char = self.myChar
+                    char.isDie = True
+                    char.cHP = 0
+                    char.cPk = msg.reader().readByte()
+                    msg.reader().readShort()
+                    msg.reader().readShort()
+                    char.cPower = msg.reader().readLong()
+                except Exception:
+                    pass
+                return
+
+            # ------------------------------------------------------------------
             # 18b. MENU NPC / CHAT POPUP (cmd 32: Bò Mộng, nhiệm vụ...)
             # ------------------------------------------------------------------
             if cmd == 32:

@@ -291,6 +291,8 @@ class TelegramAIBot:
                 self.send_message(chat_id, f"Không tìm thấy tài khoản {acc_id}.", reply_markup=self.get_main_keyboard(chat_id))
                 return True
             self.selected_targets[chat_id] = acc_id
+            if inst:
+                inst.refresh_info()
             cname = inst.char_name if inst.char_name != "Chưa vào" else inst.config.username
             online = bool(inst.client and inst.client.isConnected())
             state = "Đang online" if online else "Ngoại tuyến"
@@ -547,21 +549,21 @@ class TelegramAIBot:
         skills_str = ", ".join([get_skill_display_name(sk) for sk in char.skills]) if char.skills else "Chưa có kỹ năng đặc biệt"
 
         lines = [
-            f"= *THÔNG TIN CHI TIẾT TÀI KHOẢN [{inst.tag}]*",
+            f"= *THÔNG TIN CHI TIẾT TÀI KHOẢN [{inst.tag} - SM: {inst.power_str}]*",
             f"=============================",
             f"> *1. THÔNG TIN BẢN THÂN (CHARACTER):*",
-            f"> Tên nhân vật:    *{char.cName}* (ID: `{char.charID}`)",
+            f"> Tên nhân vật:    *{char.cName}* (ID: `{char.charID}`) | Sức mạnh: *{inst.power_str}*",
             f"> Hành tinh:       *{gender_str}* | Lớp: `{class_str}`",
             f"> Trạng thái:      *{alive_str}* | Kết nối: *{inst.status}*",
             f"> = *TÀI SẢN TIỀN TỆ:*",
-            f"  > Vàng (Xu):       *{format_compact_number(char.xu)} Xu*",
+            f"  > Vàng (Xu):       *{format_compact_number(char.xu)} Xu* ({char.xu:,} Xu)",
             f"  > Ngọc xanh:       *{format_compact_number(char.luong)} Ngọc*",
             f"  > Hồng ngọc:       *{format_compact_number(char.luongKhoa)} Ngọc khóa*",
             f"> = *CHỈ SỐ CHIẾN ĐẤU:*",
             f"  > HP (Máu):        *{format_compact_number(char.cHP)} / {format_compact_number(char.cHPFull)}* ({hp_pct}%)",
             f"  > KI / MP (Nội lực): *{format_compact_number(char.cMP)} / {format_compact_number(char.cMPFull)}* ({mp_pct}%)",
-            f"  > Sức mạnh:        *{format_compact_number(char.cPower)}*",
-            f"  > Tiềm năng:       *{format_compact_number(char.cTiemNang)}*",
+            f"  > Sức mạnh:        *{char.cPower:,} ({format_big_number(char.cPower)})*",
+            f"  > Tiềm năng:       *{char.cTiemNang:,} ({format_big_number(char.cTiemNang)})*",
             f"  > Sức đánh (Dam):  *{format_compact_number(char.cDamFull)}* (Gốc: `{format_compact_number(char.cDamGoc)}`)",
             f"  > Giáp (Def):      *{format_compact_number(char.cDefull)}* (Gốc: `{format_compact_number(char.cDefGoc)}`)",
             f"  > Chí mạng (Crit): *{char.cCriticalFull}%* (Gốc: `{char.cCriticalGoc}%`)",
@@ -584,7 +586,7 @@ class TelegramAIBot:
             lines.append(f"> HP (Máu đệ):     *{format_compact_number(pet.cHP)} / {format_compact_number(pet.cHPFull)}* ({pet_hp_pct}%)")
             lines.append(f"> KI / MP:         *{format_compact_number(pet.cMP)} / {format_compact_number(pet.cMPFull)}* ({pet_mp_pct}%)")
             lines.append(f"> Sức đánh:        *{format_compact_number(pet.cDamFull)}* | Giáp: *{format_compact_number(pet.cDefull)}* | Chí mạng: *{pet.cCriticalFull}%*")
-            lines.append(f"> Sức mạnh:        *{format_compact_number(pet.cPower)}* | Tiềm năng: *{format_compact_number(pet.cTiemNang)}*")
+            lines.append(f"> Sức mạnh:        *{pet.cPower:,} ({format_big_number(pet.cPower)})* | Tiềm năng: *{pet.cTiemNang:,} ({format_big_number(pet.cTiemNang)})*")
             lines.append(f"> Thể lực:         *{format_compact_number(pet.cStamina)} / {format_compact_number(pet.cMaxStamina)}* ({pet_sta_pct}%)")
             lines.append(f"> Kỹ năng đệ:      `{pet_skills}`")
             lines.append(f"> Trang bị đệ:     *{len(pet.arrItemBody)}* món trang bị")
@@ -624,10 +626,10 @@ class TelegramAIBot:
         lines.append(f"> Rương:   *{len(box)}* món (Dùng `/box` để xem chi tiết)")
 
         # 5. Tiến độ Săn Boss (Hiển thị nổi bật nếu đang bật hunt hoặc đã diệt boss)
-        bh = client.boss_hunter
-        is_hunting = getattr(bh, "is_hunting", False)
-        kills = getattr(bh, "boss_kill_count", 0)
-        loots = getattr(bh, "boss_looted_items_count", 0)
+        bh = getattr(client, "boss_hunter", None)
+        is_hunting = getattr(bh, "is_hunting", False) if bh else False
+        kills = getattr(bh, "boss_kill_count", 0) if bh else 0
+        loots = getattr(bh, "boss_looted_items_count", 0) if bh else 0
 
         if is_hunting or kills > 0 or loots > 0:
             lines.append(f"\n= *5. TIẾN ĐỘ SĂN BOSS:*")
@@ -677,16 +679,31 @@ class TelegramAIBot:
 
         # 6. Cấu hình Auto & Hệ thống
         lines.append(f"\n= *6. CẤU HÌNH AUTO & HỆ THỐNG:*")
-        cbm = client.combat_manager
+        cbm = getattr(client, "combat_manager", None)
         rec_str = f"BẬT ({int(self.account_manager.reconnect_delay)}s)" if (self.account_manager and self.account_manager.auto_reconnect) else "TẮT"
+        arm = getattr(client, "auto_revive_manager", None)
+        aqm = getattr(client, "auto_quest_manager", None)
+
+        is_ak = getattr(cbm, "is_ak", False) if cbm else False
+        is_ts = getattr(cbm, "is_tansat", False) if cbm else False
+        ts_mode = getattr(cbm, "tansat_mode", "mob") if cbm else "mob"
+        auto_pick = getattr(cbm, "auto_pick", False) if cbm else False
+        pick_gem = getattr(cbm, "pick_gem_only", False) if cbm else False
+        avoid_mob = getattr(cbm, "avoid_super_mob", False) if cbm else False
+        auto_pean = getattr(cbm, "auto_pean", False) if cbm else False
+        pean_pct = int(getattr(cbm, "pean_threshold", 0.3) * 100) if cbm else 30
+        arm_on = getattr(arm, "is_enabled", False) if arm else False
+        arm_mode = getattr(arm, "mode", "gem") if arm else "gem"
+        aqm_on = getattr(aqm, "is_running", False) if aqm else False
+
         lines.append(f"> Săn Boss (Hunt): {'[=] BẬT' if is_hunting else '[ ] TẮT'}")
-        lines.append(f"> Tự Đánh (AK):    {'[=] BẬT' if cbm.is_ak else '[ ] TẮT'}")
-        lines.append(f"> Tàn Sát (TS):    {'[=] BẬT' if cbm.is_tansat else '[ ] TẮT'} (Chế độ: `{cbm.tansat_mode}`)")
-        lines.append(f"> Tự Nhặt Đồ:      {'[=] BẬT' if cbm.auto_pick else '[ ] TẮT'}{' (Chỉ ngọc)' if cbm.pick_gem_only else ''}")
-        lines.append(f"> Né Siêu Quái:    {'[=] BẬT' if cbm.avoid_super_mob else '[ ] TẮT'}")
-        lines.append(f"> Tự Ăn Đậu (ABF): {'[=] BẬT' if cbm.auto_pean else '[ ] TẮT'} (khi < {int(cbm.pean_threshold*100)}%)")
-        lines.append(f"> Tự Hồi Sinh:     {'[=] BẬT' if client.auto_revive_manager.is_enabled else '[ ] TẮT'} (Mode: `{client.auto_revive_manager.mode}`)")
-        lines.append(f"> Auto NV Bò Mộng: {'[=] BẬT' if client.auto_quest_manager.is_running else '[ ] TẮT'}")
+        lines.append(f"> Tự Đánh (AK):    {'[=] BẬT' if is_ak else '[ ] TẮT'}")
+        lines.append(f"> Tàn Sát (TS):    {'[=] BẬT' if is_ts else '[ ] TẮT'} (Chế độ: `{ts_mode}`)")
+        lines.append(f"> Tự Nhặt Đồ:      {'[=] BẬT' if auto_pick else '[ ] TẮT'}{' (Chỉ ngọc)' if pick_gem else ''}")
+        lines.append(f"> Né Siêu Quái:    {'[=] BẬT' if avoid_mob else '[ ] TẮT'}")
+        lines.append(f"> Tự Ăn Đậu (ABF): {'[=] BẬT' if auto_pean else '[ ] TẮT'} (khi < {pean_pct}%)")
+        lines.append(f"> Tự Hồi Sinh:     {'[=] BẬT' if arm_on else '[ ] TẮT'} (Mode: `{arm_mode}`)")
+        lines.append(f"> Auto NV Bò Mộng: {'[=] BẬT' if aqm_on else '[ ] TẮT'}")
         lines.append(f"> Auto-Reconnect:  *{rec_str}* | Proxy: *{inst.proxy_str}*")
 
         lines.append(f"=============================")
@@ -1116,7 +1133,7 @@ class TelegramAIBot:
                     card = (
                         f"> *ĐÃ CHỌN TÀI KHOẢN: Acc #{acc_id} ({cname})* Đang online\n"
                         f"=============================\n"
-                        f"> Nhân vật:       *{cname}* ({gender_str}) | SM: *{format_compact_number(char.cPower)}*\n"
+                        f"> Nhân vật:       *{cname}* ({gender_str}) | SM: *{inst.power_str}*\n"
                         f"> HP:             *{format_compact_number(char.cHP)} / {format_compact_number(char.cHPFull)}* ({hp_pct}%) | KI: *{format_compact_number(char.cMP)}* ({mp_pct}%)\n"
                         f"> Vị trí:         *{map_name}* (Khu {zone_id:02d}) | X: `{char.cx}`, Y: `{char.cy}`\n"
                         f"> Tiền tệ:        *{format_compact_number(char.xu)} Xu* | *{format_compact_number(char.luong)}* Ngọc\n"
@@ -1533,9 +1550,16 @@ class TelegramAIBot:
             self.send_message(chat_id, "Hiện tại chưa có tài khoản nào được nạp.", reply_markup=self.get_main_keyboard(chat_id))
             return
 
+        # Kích hoạt đồng bộ chỉ số mới nhất từ server cho các tài khoản đang online
+        if hasattr(self.account_manager, "refresh_all_accounts_info"):
+            self.account_manager.refresh_all_accounts_info()
+
         accs = self.account_manager.accounts
+        curr_selected = self.selected_targets.get(chat_id)
+        scope_str = f"Tài khoản {curr_selected}" if curr_selected else "Tất cả tài khoản"
         lines = [
             "*TRẠNG THÁI TÀI KHOẢN*",
+            f"Phạm vi: *{scope_str}*",
             f"Tổng số: *{len(accs)}* tài khoản",
             f"Tự kết nối lại: *{'Đang bật' if self.account_manager.auto_reconnect else 'Đang tắt'}*",
             "",
@@ -1561,7 +1585,9 @@ class TelegramAIBot:
             elif a.status == "OFFLINE":
                 status_text = "Ngoại tuyến"
 
-            lines.append(f"*Tài khoản {a.config.acc_id}: {cname}*")
+            is_sel = (curr_selected is not None and str(a.config.acc_id) == str(curr_selected))
+            sel_tag = " 🎯 [Đang chọn]" if is_sel else ""
+            lines.append(f"*Tài khoản {a.config.acc_id}: {cname}*{sel_tag}")
             lines.append(f"Trạng thái: *{status_text}* | Sức mạnh: `{power}`")
             lines.append(f"Vị trí: {mz}")
             lines.append(f"Tự động hóa: {auto}")
@@ -1618,6 +1644,7 @@ class TelegramAIBot:
         if target_arg and target_arg.lower() not in ("all", "tatca", "*"):
             inst = self._resolve_account(target_arg)
             if inst:
+                inst.refresh_info()
                 self.send_message(chat_id, self.format_char_full_info(inst))
             else:
                 self.send_message(chat_id, f"[x] Không tìm thấy tài khoản '{target_arg}'. Gõ `/status` để xem danh sách.")
@@ -1627,10 +1654,15 @@ class TelegramAIBot:
         if curr_selected is not None and not (target_arg and target_arg.lower() in ("all", "tatca", "*")):
             inst = self._resolve_account(str(curr_selected))
             if inst:
+                inst.refresh_info()
                 self.send_message(chat_id, self.format_char_full_info(inst))
                 return
 
         # 3. Ngữ cảnh Tất cả tài khoản (ALL) hoặc target_arg == 'all'
+        # Gửi yêu cầu làm mới dữ liệu cho toàn bộ tài khoản
+        if hasattr(self.account_manager, "refresh_all_accounts_info"):
+            self.account_manager.refresh_all_accounts_info()
+
         # Gửi thông tin từng tài khoản (mỗi tài khoản 1 tin nhắn riêng biệt)
         for a in accs:
             self.send_message(chat_id, self.format_char_full_info(a))

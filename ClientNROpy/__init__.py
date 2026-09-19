@@ -19,52 +19,65 @@ if hasattr(sys.stderr, "reconfigure"):
     except Exception:
         pass
 
-# 1. Các lớp I/O và gói tin
-from .reader import myReader
-from .writer import myWriter
-from .message import Message
+# 1. Giao thức mạng, I/O gói tin và Session (Network Package)
+from .network import (
+    myReader,
+    myWriter,
+    Message,
+    ISession,
+    IMessageHandler,
+    Sender,
+    MessageCollector,
+    Session_ME,
+    ProxyConfig,
+    ProxyPool,
+    create_proxy_socket,
+    parse_proxy,
+)
 
-# 2. Các interfaces và luồng mạng
-from .isession import ISession
-from .imessage_handler import IMessageHandler
-from .sender import Sender
-from .message_collector import MessageCollector
-from .session import Session_ME
+# 2. Các mô hình thực thể và thế giới Game (Models Package)
+from .models import (
+    ItemOption,
+    OPTION_TEMPLATES,
+    Item,
+    PlayerData,
+    Pet,
+    MagicTree,
+    Waypoint,
+    Mob,
+    ItemMap,
+    ZoneInfo,
+    MapInfo,
+    Char,
+    ChatVip,
+    Boss,
+    Task,
+)
 
-# 3. Các mô hình thực thể (Models) - mỗi file 1 class
-from .item_option import ItemOption, OPTION_TEMPLATES
-from .item import Item
-from .player_data import PlayerData
-from .pet import Pet
-from .magic_tree import MagicTree
-from .waypoint import Waypoint
-from .mob import Mob
-from .item_map import ItemMap
-from .zone_info import ZoneInfo
-from .map_info import MapInfo
-from .char import Char
-from .chat_vip import ChatVip
-from .boss import Boss
-from .auto_manager import AutoManager
-from .boss_manager import BossManager
-from .boss_hunter import BossHunter
-from .combat_manager import CombatManager
-from .auto_revive_manager import AutoReviveManager
-from .auto_use_item_manager import AutoUseItemManager
-from .auto_quest_bomong import AutoQuest, AutoState, QuestInfo
-from .task import Task
-from .auto_train_pet import AutoTrainPet, AutoTrainPetMode, AutoTrainPetAttackMode
-from .auto_train_new_account import AutoTrainNewAccount
+# 3. Hệ thống Tự động hóa và Săn Boss (Auto Package)
+from .auto import (
+    AutoManager,
+    BossManager,
+    BossHunter,
+    CombatManager,
+    AutoReviveManager,
+    AutoUseItemManager,
+    AutoQuest,
+    AutoState,
+    QuestInfo,
+    AutoTrainPet,
+    AutoTrainPetMode,
+    AutoTrainPetAttackMode,
+    AutoTrainNewAccount,
+)
 
 # 4. Service, Controller và Client cấp cao
 from .service import Service
 from .controller import Controller
 from .client import ClientNRO
 
-
-# 5. Hệ thống Quản trị Đa Tài khoản & Proxy
-from .proxy_manager import ProxyConfig, ProxyPool, create_proxy_socket, parse_proxy
-from .account_manager import AccountConfig, AccountInstance, AccountManager
+# 5. Hệ thống Quản trị Đa Tài khoản (Account Package)
+from .account import AccountConfig, AccountInstance, AccountManager
 from .logger import ConsoleLogger, logger, LogLevel
 from .display import print_banner, print_accounts_table, print_cli_help
 from .command_handler import execute_client_command, execute_multi_command
@@ -179,5 +192,10 @@ __all__ = [
     "search_maps",
     "search_mobs",
     "search_npcs",
+    "AccountConfig",
+    "AccountInstance",
+    "AccountManager",
+    "ProxyConfig",
+    "ProxyPool",
 ]
 

@@ -247,6 +247,15 @@ class Service:
         except Exception as ex:
             print(f"[Service] petStatus error: {ex}")
 
+    def getPlayerMenu(self, player_id: int) -> None:
+        """Yêu cầu thông tin sức mạnh / menu người chơi hoặc bản thân (cmd -79 trong C# Service.cs)."""
+        try:
+            m = Message(-79)
+            m.writer().writeInt(player_id)
+            self.session.sendMessage(m)
+        except Exception as ex:
+            print(f"[Service] getPlayerMenu error: {ex}")
+
     def sendCheckController(self) -> None:
         """Phản hồi ping controller (-120)."""
         try:

@@ -1,10 +1,5 @@
 # -*- coding: utf-8 -*-
-"""
-Compatibility shim for CombatManager.
-Toàn bộ logic chiến đấu, AK, Tàn Sát đã được hợp nhất vào ClientNROpy.auto_manager.AutoManager.
-File này giữ lại để đảm bảo tương thích ngược 100% khi import.
-"""
-
-from .auto_manager import AutoManager as CombatManager
+# Wrapper tương thích ngược chuyển tiếp sang auto/combat_manager.py
+from .auto.combat_manager import CombatManager
 
 __all__ = ["CombatManager"]
