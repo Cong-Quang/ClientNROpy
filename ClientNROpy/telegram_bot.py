@@ -1547,7 +1547,7 @@ class TelegramAIBot:
 
         for a in accs:
             cname = a.char_name if a.char_name != "Chưa vào" else a.config.username
-            hp = a.hp_str
+            power = a.power_str
             mz = a.map_zone_str
             auto = a.auto_status_str
             status_text = a.status
@@ -1562,7 +1562,7 @@ class TelegramAIBot:
                 status_text = "Ngoại tuyến"
 
             lines.append(f"*Tài khoản {a.config.acc_id}: {cname}*")
-            lines.append(f"Trạng thái: *{status_text}* | HP: `{hp}`")
+            lines.append(f"Trạng thái: *{status_text}* | Sức mạnh: `{power}`")
             lines.append(f"Vị trí: {mz}")
             lines.append(f"Tự động hóa: {auto}")
 

@@ -356,7 +356,11 @@ class AccountInstance:
     @property
     def power_str(self) -> str:
         if self.client and self.client.myChar:
-            return f"{self.client.myChar.cPower:,}"
+            p = getattr(self.client.myChar, "cPower", 0)
+            if p >= 1_000:
+                from .game_data import format_big_number
+                return f"{p:,} ({format_big_number(p)})"
+            return f"{p:,}"
         return "N/A"
 
     @property
