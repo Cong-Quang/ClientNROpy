@@ -553,34 +553,50 @@ class ClientNRO:
     # --------------------------------------------------------------------------
     def start_auto_quest(self) -> None:
         """Bắt đầu auto nhiệm vụ Bò Mộng."""
-        self.auto_quest.start()
+        self.auto.start_auto_quest()
 
     def stop_auto_quest(self) -> None:
         """Dừng auto nhiệm vụ Bò Mộng."""
-        self.auto_quest.stop()
+        self.auto.stop_auto_quest()
 
     def toggle_auto_quest(self) -> bool:
         """Bật / Tắt auto nhiệm vụ Bò Mộng."""
-        return self.auto_quest.toggle()
+        return self.auto.toggle_auto_quest()
 
     def get_quest_status(self) -> Dict[str, Any]:
         """Lấy trạng thái auto nhiệm vụ Bò Mộng."""
-        return self.auto_quest.get_status()
+        return self.auto.get_quest_status()
 
     # --------------------------------------------------------------------------
     # AUTO SHUTTLE (Di chuyển qua lại giữa 2 map)
     # --------------------------------------------------------------------------
     def start_shuttle(self, map_a: int, map_b: int, rounds: int = 0) -> bool:
         """Bắt đầu tự động di chuyển qua lại giữa 2 map (A <-> B)."""
-        return self.shuttle_manager.start(map_a, map_b, rounds)
+        return self.auto.start_shuttle(map_a, map_b, rounds)
 
     def stop_shuttle(self) -> None:
         """Dừng di chuyển qua lại 2 map."""
-        self.shuttle_manager.stop()
+        self.auto.stop_shuttle()
 
     def get_shuttle_status(self) -> Dict[str, Any]:
         """Lấy thông tin trạng thái shuttle hiện tại."""
-        return self.shuttle_manager.get_status()
+        return self.auto.get_shuttle_status()
+
+    def get_combat_status(self) -> Dict[str, Any]:
+        """Lấy thông tin trạng thái chiến đấu và tàn sát."""
+        return self.auto.get_combat_status()
+
+    def get_hunt_status(self) -> Dict[str, Any]:
+        """Lấy thông tin trạng thái săn Boss."""
+        return self.auto.get_hunt_status()
+
+    def get_auto_revive_status(self) -> Dict[str, Any]:
+        """Lấy thông tin trạng thái tự động hồi sinh."""
+        return self.auto.get_auto_revive_status()
+
+    def get_auto_use_item_status(self) -> Dict[str, Any]:
+        """Lấy thông tin trạng thái tự động dùng vật phẩm."""
+        return self.auto.get_auto_use_item_status()
 
 
 

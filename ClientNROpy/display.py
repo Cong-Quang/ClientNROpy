@@ -504,16 +504,16 @@ def print_hunt_status(client: ClientNRO):
 # ============================================================
 
 def print_quest_status(client: ClientNRO):
-    st = client.get_quest_status()
+    st = client.get_quest_status() or {}
 
     _print_title("TỰ ĐỘNG NHIỆM VỤ BÒ MỘNG", 78)
 
-    print(f"Trạng thái:              {_bool_text(st['is_running'])}")
-    print(f"State:               {st['state']}")
-    print(f"Nhiệm vụ hiện tại:       {st['quest']}")
-    print(f"Nhiệm vụ đã hoàn thành:    {st['quests_completed']}")
-    print(f"Tổng số quái đã diệt:         {st['total_kills']}")
-    print(f"Thời gian chạy:             {st['time_str']}")
+    print(f"Trạng thái:              {_bool_text(st.get('is_running', False))}")
+    print(f"State:               {st.get('state', 'IDLE')}")
+    print(f"Nhiệm vụ hiện tại:       {st.get('quest', 'Chưa có')}")
+    print(f"Nhiệm vụ đã hoàn thành:    {st.get('quests_completed', 0)}")
+    print(f"Tổng số quái đã diệt:         {st.get('total_kills', 0)}")
+    print(f"Thời gian chạy:             {st.get('time_str', '0m00s')}")
 
     print("=" * 78)
 
@@ -523,14 +523,14 @@ def print_quest_status(client: ClientNRO):
 # ============================================================
 
 def print_shuttle_status(client: ClientNRO):
-    st = client.get_shuttle_status()
+    st = client.get_shuttle_status() or {}
 
     _print_title("SHUTTLE - TUYẾN HAI BẢN ĐỒ", 78)
 
-    print(f"Trạng thái:              {_bool_text(st['is_running'])}")
-    print(f"Tuyến:               {st['map_a']} <-> {st['map_b']}")
-    print(f"Số lượt đã đi:      {st['legs_done']}")
-    print(f"Thông báo:             {st['status_message']}")
+    print(f"Trạng thái:              {_bool_text(st.get('is_running', False))}")
+    print(f"Tuyến:               {st.get('map_a', '?')} <-> {st.get('map_b', '?')}")
+    print(f"Số lượt đã đi:      {st.get('legs_done', 0)}")
+    print(f"Thông báo:             {st.get('status_message', 'Chưa chạy')}")
 
     print("=" * 78)
 

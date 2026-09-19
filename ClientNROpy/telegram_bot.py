@@ -1351,6 +1351,14 @@ class TelegramAIBot:
             return
 
         # ----------------------------------------------------------------------
+        # F2. Lệnh /nvbm, /bomong, /quest (Nhiệm vụ Bò Mộng hằng ngày)
+        # ----------------------------------------------------------------------
+        if first_token in ("nvbm", "nhiemvu", "quest", "bomong"):
+            target_arg = str(curr_selected) if curr_selected else None
+            self._send_nvbm_message(chat_id, target_arg, sub_args)
+            return
+
+        # ----------------------------------------------------------------------
         # G. QUẢN LÝ TÀI KHOẢN & PROXY (CRUD) — vd: /adduser poopooi03 02082003
         # ----------------------------------------------------------------------
         if first_token in ("adduser", "addacc", "themacc"):
@@ -1461,7 +1469,7 @@ class TelegramAIBot:
             "xmap", "goto", "zone", "ak", "ts", "tansat",
             "anhat", "cnn", "nsq", "abf",
             "autohs", "autors", "auto_revive", "hs", "revive", "hoisinh", "wake",
-            "nvbm", "nhiemvu", "quest", "bomong", "useitem", "shuttle", "dual",
+            "useitem", "shuttle", "dual",
             "tele", "tp", "focus", "chat", "reconnect", "autoreconnect", "rec",
             "telegram", "tg", "bot", "log", "mute", "cls", "clear", "exit", "quit",
             "trainpet", "upde", "autode", "petauto",
@@ -2310,20 +2318,27 @@ class TelegramAIBot:
             "=============================",
         ]
 
-        # 1. Boss đang sống / xuất hiện
-        alive_bosses = []
+        # 1. Boss đang xuất hiện & vừa bị hạ gần đây
+        recent_bosses = []
         for a in accs:
             if a.client and hasattr(a.client, "boss_manager"):
-                for b in a.client.boss_manager.get_alive_bosses():
+                for b in reversed(a.client.boss_manager.get_all_bosses()):
                     b_key = f"{b.get('name')}:{b.get('map_name')}"
-                    if not any(f"{x.get('name')}:{x.get('map_name')}" == b_key for x in alive_bosses):
-                        alive_bosses.append(b)
+                    if not any(f"{x.get('name')}:{x.get('map_name')}" == b_key for x in recent_bosses):
+                        recent_bosses.append(b)
 
         lines.append("= *1. BOSS ĐANG XUẤT HIỆN:*")
-        if alive_bosses:
-            for i, b in enumerate(alive_bosses[:10]):
+        if recent_bosses:
+            for i, b in enumerate(recent_bosses[:10]):
                 z_str = f" (Khu {b.get('zone_id')})" if b.get('zone_id', -1) >= 0 else ""
-                lines.append(f"  `{i+1:02d}.` *{b.get('name')}* tại *{b.get('map_name')}*{z_str}")
+                m_str = f" tại *{b.get('map_name')}*" if b.get('map_name') else ""
+                is_died = b.get("is_died", False)
+                killer = (b.get("killer") or "").strip()
+                if is_died:
+                    st_text = f"[{killer}]" if killer else "[Đã chết]"
+                else:
+                    st_text = "[Còn sống]"
+                lines.append(f"  `{i+1:02d}.` *{b.get('name')}*{m_str}{z_str} {st_text}")
         else:
             lines.append("  (Hiện chưa có Boss nào được phát hiện)")
 
@@ -2357,6 +2372,78 @@ class TelegramAIBot:
 
         lines.append("=============================")
         lines.append("> *Lệnh:* `/hunt on` | `/hunt off` | `/boss go <tên boss>`")
+        self.send_message(chat_id, "\n".join(lines))
+
+    def _send_nvbm_message(self, chat_id: Union[int, str], target_arg: Optional[str] = None, sub_args: Optional[List[str]] = None) -> None:
+        """Xử lý lệnh /nvbm: Bật/Tắt và hiển thị trạng thái làm Nhiệm vụ Bò Mộng hằng ngày."""
+        if not self.account_manager or not self.account_manager.accounts:
+            self.send_message(chat_id, "[!] Hệ thống chưa có tài khoản nào được nạp.")
+            return
+
+        accs = self.account_manager.accounts
+        curr_selected = self.selected_targets.get(chat_id)
+
+        # 1. Xác định danh sách account mục tiêu
+        target_accs = []
+        if target_arg:
+            inst = self._resolve_account(target_arg)
+            if inst:
+                target_accs = [inst]
+        elif curr_selected:
+            inst = self._resolve_account(str(curr_selected))
+            if inst:
+                target_accs = [inst]
+
+        if not target_accs:
+            target_accs = accs
+
+        # 2. Xử lý hành động on/off nếu có
+        subs = [a.lower().strip() for a in (sub_args or [])]
+        if any(x in ("on", "start", "1") for x in subs):
+            for a in target_accs:
+                if a.client:
+                    a.client.start_auto_quest()
+            target_name = f"Acc #{target_accs[0].config.acc_id} ({target_accs[0].char_name})" if len(target_accs) == 1 else "Toàn bộ tài khoản"
+            self.send_message(chat_id, f"[=] *[NV BÒ MỘNG]* Đã BẬT tự động làm nhiệm vụ cho *{target_name}*!")
+            return
+
+        if any(x in ("off", "stop", "0") for x in subs):
+            for a in target_accs:
+                if a.client:
+                    a.client.stop_auto_quest()
+            target_name = f"Acc #{target_accs[0].config.acc_id} ({target_accs[0].char_name})" if len(target_accs) == 1 else "Toàn bộ tài khoản"
+            self.send_message(chat_id, f"[=] *[NV BÒ MỘNG]* Đã TẮT tự động làm nhiệm vụ cho *{target_name}*!")
+            return
+
+        # 3. Hiển thị bảng trạng thái NVBM trực quan
+        lines = [
+            "[i] *TỰ ĐỘNG NHIỆM VỤ BÒ MỘNG*",
+            "=============================",
+        ]
+
+        for a in target_accs:
+            c = a.client
+            st = c.get_quest_status() if c else {}
+            is_running = st.get("is_running", False)
+            state_desc = st.get("state", "Đang nghỉ")
+            q_desc = st.get("quest", "Chưa có")
+            quests_done = st.get("quests_completed", 0)
+            total_kills = st.get("total_kills", 0)
+            time_str = st.get("time_str", "0m00s")
+            status_tag = "[Bật]" if is_running else "[Tắt]"
+
+            lines.append(f"> *Acc #{a.config.acc_id}* ({a.char_name}): {status_tag}")
+            lines.append(f"  = *Trạng thái:* {state_desc}")
+            lines.append(f"  = *Nhiệm vụ:* {q_desc}")
+            lines.append(f"  = *Đã hoàn thành:* {quests_done} NV | *Đã diệt:* {total_kills} quái")
+            lines.append(f"  = *Thời gian chạy:* {time_str}")
+            lines.append("")
+
+        if lines and lines[-1] == "":
+            lines.pop()
+
+        lines.append("=============================")
+        lines.append("[i]*Lệnh:* `/nvbm on` | `/nvbm off` | `/nvbm status`")
         self.send_message(chat_id, "\n".join(lines))
 
     def _handle_login_cmd(self, chat_id: Union[int, str], target_arg: Optional[str] = None) -> None:

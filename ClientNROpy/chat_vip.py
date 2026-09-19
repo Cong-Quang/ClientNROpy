@@ -78,9 +78,13 @@ class ChatVip:
         cleaned = raw_text.strip()
         display_text = cleaned[1:].strip() if cleaned.startswith("!") else cleaned
 
-        # Ủy quyền cho BossManager bóc tách thông tin Boss
-        from .boss_manager import BossManager
-        boss = BossManager.parse_boss_announcement(cleaned)
+        # Ủy quyền cho BossManager bóc tách thông tin Boss (bọc try-except phòng thủ)
+        boss = None
+        try:
+            from .boss_manager import BossManager
+            boss = BossManager.parse_boss_announcement(cleaned)
+        except Exception:
+            boss = None
 
         return cls(text=display_text, boss=boss)
 
