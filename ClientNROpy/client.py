@@ -578,6 +578,25 @@ class ClientNRO:
         return self.auto.get_quest_status()
 
     # --------------------------------------------------------------------------
+    # AUTO CHUỖI NHIỆM VỤ CHÍNH TUYẾN / NHIỆM VỤ MỚI (MAIN TASK)
+    # --------------------------------------------------------------------------
+    def start_auto_main_task(self) -> Tuple[bool, str]:
+        """Bắt đầu auto chuỗi nhiệm vụ chính tuyến."""
+        return self.auto.start_auto_main_task()
+
+    def stop_auto_main_task(self) -> Tuple[bool, str]:
+        """Dừng auto chuỗi nhiệm vụ chính tuyến."""
+        return self.auto.stop_auto_main_task()
+
+    def toggle_auto_main_task(self, enable: Optional[bool] = None) -> bool:
+        """Bật / Tắt auto chuỗi nhiệm vụ chính tuyến."""
+        return self.auto.toggle_auto_main_task(enable)
+
+    def get_main_task_status(self) -> Dict[str, Any]:
+        """Lấy trạng thái chuỗi nhiệm vụ chính tuyến."""
+        return self.auto.get_main_task_status()
+
+    # --------------------------------------------------------------------------
     # AUTO SHUTTLE (Di chuyển qua lại giữa 2 map)
     # --------------------------------------------------------------------------
     def start_shuttle(self, map_a: int, map_b: int, rounds: int = 0) -> bool:

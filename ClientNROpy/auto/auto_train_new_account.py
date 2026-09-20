@@ -91,10 +91,12 @@ class AutoTrainNewAccount:
         task = getattr(char, "task", None)
         task_id = getattr(task, "taskId", getattr(char, "ctaskId", 0))
 
-        # Đã hoàn thành toàn bộ chuỗi nhiệm vụ tân thủ (> 11)
+        # Đã hoàn thành toàn bộ chuỗi nhiệm vụ tân thủ (> 11) -> Chuyển tiếp sang Chuỗi Nhiệm Vụ Mới
         if task_id > 11:
-            self._log("Chúc mừng! Đã hoàn thành xuất sắc toàn bộ chuỗi nhiệm vụ sơ sinh (NV 0 -> 11). Tự động tắt auto!")
+            self._log("Chúc mừng! Đã hoàn thành xuất sắc toàn bộ chuỗi nhiệm vụ sơ sinh (NV 0 -> 11). Tự động chuyển tiếp sang Auto Chuỗi Nhiệm Vụ Mới!")
             self.set_state(False)
+            if hasattr(self.client, "auto") and hasattr(self.client.auto, "start_auto_main_task"):
+                self.client.auto.start_auto_main_task()
             return False
 
         xmap = getattr(self.client, "xmap", None)

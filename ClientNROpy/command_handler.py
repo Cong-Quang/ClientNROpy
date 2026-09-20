@@ -76,6 +76,9 @@ CLI_ALIASES = {
     "thoat": "logout",
     "tudong": "auto",
     "autors": "autohs",
+    "autonv": "nv",
+    "maintask": "nv",
+    "nvchinh": "nv",
 }
 
 # Danh sách toàn bộ các lệnh hợp lệ để gợi ý khi người dùng gõ nhầm (Fuzzy suggestion)
@@ -84,6 +87,7 @@ ALL_KNOWN_COMMANDS = [
     "item", "zone", "map", "info", "bag", "box", "pet", "harvest",
     "xmap", "goto", "hunt", "boss", "ak", "ts", "tansat",
     "anhat", "cnn", "nsq", "abf", "autohs", "hs", "auto", "trainpet", "trainacc",
+    "nv", "autonv", "maintask", "nvchinh",
     "nvbm", "shuttle", "chat", "cls", "clear", "log", "mute",
     "telegram", "proxy", "help", "exit", "quit"
 ]
@@ -479,7 +483,7 @@ def execute_client_command(client: ClientNRO, line: str) -> bool:
         else:
             print("Cú pháp: shuttle <mapA> <mapB> [vòng] | shuttle stop")
 
-    elif cmd in ("nvbm", "nhiemvu", "quest", "bomong"):
+    elif cmd in ("nvbm", "bomong"):
         subs = [a.lower().strip() for a in args]
         if not subs or any(x in ("status", "st", "info") for x in subs):
             print_quest_status(client)
@@ -491,6 +495,32 @@ def execute_client_command(client: ClientNRO, line: str) -> bool:
             logger.system("Auto NV Bò Mộng: BẬT!", account_tag=tag)
         else:
             print("Cú pháp: nvbm [on|off|status]")
+
+    elif cmd in ("nv", "autonv", "maintask", "nvchinh", "task", "nhiemvu", "quest"):
+        subs = [a.lower().strip() for a in args]
+        if not subs or any(x in ("status", "st", "info") for x in subs):
+            st = client.get_main_task_status()
+            map_name = st.get("current_map_name", "Chưa rõ")
+            zone_id = st.get("current_zone_id", -1)
+            if map_name == "Chưa rõ" and hasattr(client, "myChar") and client.myChar and getattr(client.myChar, "mapInfo", None):
+                map_name = getattr(client.myChar.mapInfo, "mapName", "") or get_map_name(getattr(client.myChar.mapInfo, "mapID", -1))
+                zone_id = getattr(client.myChar.mapInfo, "zoneID", -1)
+
+            zone_str = f"Khu {zone_id:02d}" if zone_id >= 0 else "Chưa rõ khu"
+            print(f"\n=== TRẠNG THÁI AUTO NHIỆM VỤ CHÍNH TUYẾN [{tag}] ===")
+            print(f"- Hoạt động:             {'ĐANG BẬT [ON]' if st.get('is_enabled') else 'ĐÃ TẮT [OFF]'}")
+            print(f"- Vị trí hiện tại:       {map_name} ({zone_str})")
+            print(f"- Trạng thái FSM:        {st.get('state', 'N/A')}")
+            print(f"- Chi tiết:              {st.get('status_message', 'N/A')}")
+            print(f"- Tiến trình:            {st.get('task_display', 'N/A')}\n")
+        elif any(x in ("off", "stop", "0", "tat") for x in subs):
+            client.stop_auto_main_task()
+            logger.system("Auto Nhiệm Vụ Chính Tuyến: TẮT!", account_tag=tag)
+        elif any(x in ("on", "start", "1", "bat") for x in subs):
+            client.start_auto_main_task()
+            logger.system("Auto Nhiệm Vụ Chính Tuyến: BẬT!", account_tag=tag)
+        else:
+            print("Cú pháp: nv [on|off|status]")
 
     # Lệnh chiến đấu và tàn sát
     elif cmd == "focus":
@@ -1211,11 +1241,14 @@ def execute_multi_command(
                 logger.error(f"Lỗi khi thực thi '{line}': {ex}", account_tag=a.tag)
         return True, active_target
     else:
+        if cmd in ALL_KNOWN_COMMANDS:
+            print(f"[!] Hiện tại chưa có tài khoản nào kết nối online để thực thi lệnh '{cmd}'. Gõ 'login' hoặc 'status' để kiểm tra.")
+            return True, active_target
         matches = difflib.get_close_matches(cmd, ALL_KNOWN_COMMANDS, n=2, cutoff=0.55)
         if matches:
             suggestion_str = " hoặc ".join([f"'{m}'" for m in matches])
             print(f"Không rõ lệnh '{cmd}'. Có phải bạn muốn dùng: {suggestion_str}?")
-            print("Gõ 'help' hoặc 'status' để xem danh sách lệnh.")
         else:
-            print(f"Không rõ lệnh '{cmd}'. Gõ 'help' hoặc 'status' để xem trạng thái.")
-        return True, active_target
+            print(f"Không rõ lệnh '{cmd}'. Gõ 'help' hoặc 'status' để xem danh sách lệnh.")
+        return False, active_target
+

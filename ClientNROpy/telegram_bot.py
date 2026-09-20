@@ -350,6 +350,9 @@ class TelegramAIBot:
             "tắt tự nhặt đồ": "anhat off",
             "bật tự hồi sinh": "autohs on",
             "tắt tự hồi sinh": "autohs off",
+            "bật auto nhiệm vụ": "nv on",
+            "tắt auto nhiệm vụ": "nv off",
+            "trạng thái nhiệm vụ": "nv status",
             "thu hoạch đậu": "harvest",
         }
         if mode == "control" and lower in control_commands:
@@ -1200,6 +1203,9 @@ class TelegramAIBot:
             "upde": "trainpet",
             "ta": "trainacc",
             "nvts": "trainacc",
+            "autonv": "nv",
+            "maintask": "nv",
+            "nvchinh": "nv",
             "hp": "help",
             "trogiup": "help",
             "conn": "login",
@@ -1495,6 +1501,7 @@ class TelegramAIBot:
             "telegram", "tg", "bot", "log", "mute", "cls", "clear", "exit", "quit",
             "trainpet", "upde", "autode", "petauto",
             "trainacc", "newacc", "autonewacc", "nvts",
+            "nv", "autonv", "maintask", "nvchinh", "task", "nhiemvu", "quest",
             "harvest", "dau", "thuhoach", "pet", "detu",
             "bag", "balo", "box", "ruong", "login", "logout"
         }
