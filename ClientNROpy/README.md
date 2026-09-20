@@ -34,7 +34,7 @@
 - [`ClientNROpy/xmap/`](file:///c:/data/nro/ClientNROpy/xmap): Thuật toán Dijkstra, dữ liệu liên kết 160 map, Capsule Đặc Biệt / Thường.
 
 ### 5. Hệ thống Auto Nhiệm Vụ Bò Mộng Hằng Ngày (`AutoQuest` FSM)
-- [`ClientNROpy/auto_quest_bomong.py`](file:///c:/data/nro/ClientNROpy/auto_quest_bomong.py): Máy trạng thái `IDLE → GET_QUEST → NAVIGATE_TO_MAP → SELECT_ZONE → EXECUTE_QUEST → REPORT_QUEST`:
+- [`ClientNROpy/auto_quest_bomong.py`](file:///c:/data/nro/ClientNROpy/auto_quest_bomong.py): Máy trạng thái `IDLE -> GET_QUEST -> NAVIGATE_TO_MAP -> SELECT_ZONE -> EXECUTE_QUEST -> REPORT_QUEST`:
   - **Nhận NV Siêu khó** tại Bò Mộng (map 47, NPC template 17): menu `[1, 4]`.
   - **Parse menu NPC** (cmd 32): tên quái, map, tiến độ `x/y`, số NV còn lại trong ngày; tự dừng khi hết NV.
   - **Xmap tới map NV** (bảng `MOB_LOCATION_DATA`), kiểm tra điều kiện vào map, tự huỷ/nhận NV mới nếu map không vào được.
@@ -167,6 +167,6 @@ Toàn bộ hệ thống đã được kiểm thử và xác nhận hoạt độn
 - Bóc tách thông báo Boss xuất hiện và bị hạ gục trực tiếp từ server (`Yanrobi`, `Tiểu đội trưởng Ginyu`, `Cooler Vàng`...).
 - Di chuyển Xmap đa map mượt mà.
 - Cơ chế đổi khu ngẫu nhiên `0.5s - 0.7s` và thích ứng cooldown server tự động.
-- Tàn sát xoay skill theo hành tinh (verify xoay `9→1→0`, `12→3→2`, `13→5→4` kèm `selectSkill`).
-- Auto NV Bò Mộng parse menu mẫu (`dơi da xanh → map 67/template 49`, đếm kill đúng loại).
+- Tàn sát xoay skill theo hành tinh (verify xoay `9->1->0`, `12->3->2`, `13->5->4` kèm `selectSkill`).
+- Auto NV Bò Mộng parse menu mẫu (`dơi da xanh -> map 67/template 49`, đếm kill đúng loại).
 - Sẵn sàng để mở rộng và tinh chỉnh theo nhu cầu người dùng.

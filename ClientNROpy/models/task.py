@@ -22,7 +22,7 @@ def clean_task_name(raw_name: str) -> str:
     # 1. Tìm dòng chứa 'nhiệm vụ' hoặc 'nv:' từ dưới lên
     task_line = next((l for l in reversed(lines) if any(k in l.lower() for k in ["nhiệm vụ", "nv:"])), None)
     if task_line:
-        cleaned = re.sub(r"(?i)^.*?(?:nhiệm\s*vụ|nv)[^\:\-]*[:：\-]\s*", "", task_line).strip()
+        cleaned = re.sub(r"(?i)^.*?(?:nhiệm\s*vụ|nv)[^\:\-]*[:\uFF1A\-]\s*", "", task_line).strip()
         if cleaned:
             return cleaned
         return task_line
@@ -34,7 +34,7 @@ def clean_task_name(raw_name: str) -> str:
     )
     filtered = [l for l in lines if not any(w in l.lower() for w in spam_kw)]
     candidate = filtered[-1] if filtered else lines[-1]
-    candidate = re.sub(r"(?i)^.*?(?:nhiệm\s*vụ|nv)[^\:\-]*[:：\-]\s*", "", candidate).strip()
+    candidate = re.sub(r"(?i)^.*?(?:nhiệm\s*vụ|nv)[^\:\-]*[:\uFF1A\-]\s*", "", candidate).strip()
     return candidate
 
 

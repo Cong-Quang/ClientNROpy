@@ -1103,6 +1103,15 @@ class AutoManager:
                 and (not self.target_mob_ids or m.mobId in self.target_mob_ids)
                 and (not self.target_mob_types or m.templateId in self.target_mob_types)
             ]
+            if not candidate_mobs and (self.target_mob_types or self.target_mob_ids):
+                # Fallback: Nếu bộ lọc quái (theo template hoặc mob ID) không có con nào trong map hiện tại,
+                # tự động fallback đánh các quái thông thường có sẵn để nhân vật không bị đứng đơ một chỗ
+                candidate_mobs = [
+                    m for m in mobs
+                    if getattr(m, "status", 0) not in (0, 1) and getattr(m, "hp", 0) > 0
+                    and (not self.avoid_super_mob or not getattr(m, "isBoss", False))
+                ]
+
             if candidate_mobs:
                 target_mob = min(candidate_mobs, key=lambda m: my_char.distance_to(m.x, m.y))
                 my_char.focus_mob(target_mob)

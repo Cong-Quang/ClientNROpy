@@ -672,7 +672,7 @@ def _telegram_nettest(bot) -> None:
         ip = socket.getaddrinfo(host, 443, type=socket.SOCK_STREAM)[0][4][0]
         print(f"    [1] DNS: OK ({host} -> {ip})")
     except Exception as ex:
-        print(f"    [1] DNS: FAIL ({ex}) — VPS không phân giải được tên miền!")
+        print(f"    [1] DNS: FAIL ({ex}) - VPS không phân giải được tên miền!")
         return
 
     try:
@@ -680,7 +680,7 @@ def _telegram_nettest(bot) -> None:
         sock = socket.create_connection((host, 443), timeout=10)
         print(f"    [2] TCP 443: OK ({int((time.time() - t0) * 1000)}ms)")
     except Exception as ex:
-        print(f"    [2] TCP 443: FAIL ({ex}) — NAT/firewall chặn cổng 443!")
+        print(f"    [2] TCP 443: FAIL ({ex}) - NAT/firewall chặn cổng 443!")
         return
 
     try:
@@ -690,7 +690,7 @@ def _telegram_nettest(bot) -> None:
         print(f"    [3] TLS: OK ({tls_sock.version()}, {tls_sock.cipher()[0]}, {int((time.time() - t0) * 1000)}ms)")
         tls_sock.close()
     except Exception as ex:
-        print(f"    [3] TLS: FAIL ({ex}) — gãy bắt tay TLS!")
+        print(f"    [3] TLS: FAIL ({ex}) - gãy bắt tay TLS!")
         try:
             sock.close()
         except Exception:
@@ -700,9 +700,9 @@ def _telegram_nettest(bot) -> None:
     try:
         res = bot._api_call("getMe", {}, timeout=15) or {}
         if res.get("ok"):
-            print(f"    [4] API getMe: OK (@{res.get('result', {}).get('username')}) — token hợp lệ!")
+            print(f"    [4] API getMe: OK (@{res.get('result', {}).get('username')}) - token hợp lệ!")
         else:
-            print(f"    [4] API getMe: FAIL ({res}) — token sai hoặc bot đã bị xóa!")
+            print(f"    [4] API getMe: FAIL ({res}) - token sai hoặc bot đã bị xóa!")
     except Exception as ex:
         print(f"    [4] API getMe: FAIL ({ex})")
 
@@ -875,7 +875,7 @@ def execute_multi_command(
             info = bot._api_call("getWebhookInfo", {}, timeout=15) or {}
             res = info.get("result", {}) if info.get("ok") else {}
             url = res.get("url", "")
-            print(f"[*] Webhook: {url if url else '(không bật — polling nhận lệnh bình thường)'}")
+            print(f"[*] Webhook: {url if url else '(không bật - polling nhận lệnh bình thường)'}")
             if url:
                 print("    [!] Webhook đang bật sẽ NUỐT tin nhắn, bot không trả lời lệnh!")
                 print("    Gõ 'telegram delwebhook' để tắt.")

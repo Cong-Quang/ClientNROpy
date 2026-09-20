@@ -1376,7 +1376,7 @@ class TelegramAIBot:
             return
 
         # ----------------------------------------------------------------------
-        # G. QUẢN LÝ TÀI KHOẢN & PROXY (CRUD) — vd: /adduser poopooi03 02082003
+        # G. QUẢN LÝ TÀI KHOẢN & PROXY (CRUD) - vd: /adduser poopooi03 02082003
         # ----------------------------------------------------------------------
         if first_token in ("adduser", "addacc", "themacc"):
             if len(sub_args) < 2:
@@ -1424,10 +1424,14 @@ class TelegramAIBot:
             if not sub_args:
                 self.send_message(
                     chat_id,
-                    "Cú pháp: `/addproxy <proxy>`\nVd: `/addproxy socks5://u:p@1.2.3.4:1080`"
+                    "Cú pháp: `/addproxy <proxy>`\n"
+                    "Vd 1: `/addproxy 31.59.20.176:6754:quangproxyx:QuangProxy`\n"
+                    "Vd 2: `/addproxy http://quangproxyx:QuangProxy@31.59.20.176:6754/`\n"
+                    "Vd 3: `/addproxy 31.59.20.176 6754 quangproxyx QuangProxy`"
                 )
                 return
-            ok, msg = self.account_manager.add_proxy_and_save(sub_args[0])
+            proxy_input = " ".join(sub_args).strip()
+            ok, msg = self.account_manager.add_proxy_and_save(proxy_input)
             self._try_delete_message(chat_id, msg_id)
             self.send_message(chat_id, f"{'[=]' if ok else '[x]'} {msg}")
             return
@@ -1446,7 +1450,7 @@ class TelegramAIBot:
             for i, p in enumerate(pool.proxies):
                 lines.append(f"  [{i+1}] `{p.display_str}` (đang gán: {p.active_accounts_count} acc)")
             if not pool.proxies:
-                lines.append("  (chưa có proxy nào — thêm bằng `/addproxy`)")
+                lines.append("  (chưa có proxy nào - thêm bằng `/addproxy`)")
             self.send_message(chat_id, "\n".join(lines))
             return
 
@@ -1553,6 +1557,7 @@ class TelegramAIBot:
         # Kích hoạt đồng bộ chỉ số mới nhất từ server cho các tài khoản đang online
         if hasattr(self.account_manager, "refresh_all_accounts_info"):
             self.account_manager.refresh_all_accounts_info()
+            time.sleep(0.35)
 
         accs = self.account_manager.accounts
         curr_selected = self.selected_targets.get(chat_id)
@@ -1586,7 +1591,7 @@ class TelegramAIBot:
                 status_text = "Ngoại tuyến"
 
             is_sel = (curr_selected is not None and str(a.config.acc_id) == str(curr_selected))
-            sel_tag = " 🎯 [Đang chọn]" if is_sel else ""
+            sel_tag = " <Đang chọn>" if is_sel else ""
             lines.append(f"*Tài khoản {a.config.acc_id}: {cname}*{sel_tag}")
             lines.append(f"Trạng thái: *{status_text}* | Sức mạnh: `{power}`")
             lines.append(f"Vị trí: {mz}")
@@ -1645,6 +1650,7 @@ class TelegramAIBot:
             inst = self._resolve_account(target_arg)
             if inst:
                 inst.refresh_info()
+                time.sleep(0.35)
                 self.send_message(chat_id, self.format_char_full_info(inst))
             else:
                 self.send_message(chat_id, f"[x] Không tìm thấy tài khoản '{target_arg}'. Gõ `/status` để xem danh sách.")
@@ -1655,6 +1661,7 @@ class TelegramAIBot:
             inst = self._resolve_account(str(curr_selected))
             if inst:
                 inst.refresh_info()
+                time.sleep(0.35)
                 self.send_message(chat_id, self.format_char_full_info(inst))
                 return
 
@@ -1662,11 +1669,12 @@ class TelegramAIBot:
         # Gửi yêu cầu làm mới dữ liệu cho toàn bộ tài khoản
         if hasattr(self.account_manager, "refresh_all_accounts_info"):
             self.account_manager.refresh_all_accounts_info()
+            time.sleep(0.4)
 
         # Gửi thông tin từng tài khoản (mỗi tài khoản 1 tin nhắn riêng biệt)
         for a in accs:
             self.send_message(chat_id, self.format_char_full_info(a))
-            time.sleep(0.08)
+            time.sleep(0.1)
 
     def _send_bag_message(self, chat_id: Union[int, str], target_arg: Optional[str] = None) -> None:
         if not self.account_manager or not self.account_manager.accounts:
@@ -1982,9 +1990,9 @@ class TelegramAIBot:
                     item_sample_name = get_item_display_name(matched[0][1].template_id, matched[0][1].info)
                     item_sample_id = matched[0][1].template_id
                 slots_str = ", ".join([f"Ô {s+1:02d} (x{it.quantity})" for s, it in matched])
-                lines.append(f"• *[{inst.tag}]*: Có *x{acc_total:,}* ({slots_str})")
+                lines.append(f"> *[{inst.tag}]*: Có *x{acc_total:,}* ({slots_str})")
             else:
-                lines.append(f"• *[{inst.tag}]*: [Không có]")
+                lines.append(f"> *[{inst.tag}]*: [Không có]")
 
         lines.append("=============================")
         if grand_total > 0:
@@ -2038,9 +2046,9 @@ class TelegramAIBot:
                 m_name = r.get("map_name", "")
                 c_name = getattr(a, "char_name", "") or "NV"
                 if r["stayed"]:
-                    lines.append(f"• *[{a.tag}]* ({c_name}): Đang ở *Khu {t_z:02d}* ({m_name}) -> Đã là khu ít người nhất, giữ nguyên")
+                    lines.append(f"> *[{a.tag}]* ({c_name}): Đang ở *Khu {t_z:02d}* ({m_name}) -> Đã là khu ít người nhất, giữ nguyên")
                 else:
-                    lines.append(f"• *[{a.tag}]* ({c_name}): Khu {f_z:02d} -> *Khu {t_z:02d}* ({m_name}) -> Tản vào khu vắng")
+                    lines.append(f"> *[{a.tag}]* ({c_name}): Khu {f_z:02d} -> *Khu {t_z:02d}* ({m_name}) -> Tản vào khu vắng")
 
             lines.append("=============================")
             lines.append("> *Thành công:* Toàn bộ tài khoản đã được tản đều ra các khu vắng, không đụng nhau!")
@@ -2104,7 +2112,7 @@ class TelegramAIBot:
                     for a in accs_in_map:
                         c_name = a.char_name if a.char_name and a.char_name != "Chưa vào" else a.config.username
                         zid = getattr(a.client.myChar.mapInfo, "zoneID", 0)
-                        acc_status_list.append(f"• *[{a.tag}]* {c_name}: *Khu {zid:02d}*")
+                        acc_status_list.append(f"> *[{a.tag}]* {c_name}: *Khu {zid:02d}*")
 
                     lines = [
                         f"= *DANH SÁCH KHU VỰC* (Bản đồ: *{m.mapName}* - ID: `{m.mapID}`)",
@@ -2270,7 +2278,7 @@ class TelegramAIBot:
             for a in targets:
                 st = a.client.get_auto_revive_status()
                 st_icon = "[ON]" if st["is_enabled"] else "[OFF]"
-                lines.append(f"• *[{a.tag}]*: `{st_icon}` Chế độ: *{st['mode_str']}* (Đã HS: {st['revive_count']} lần)")
+                lines.append(f"> *[{a.tag}]*: `{st_icon}` Chế độ: *{st['mode_str']}* (Đã HS: {st['revive_count']} lần)")
             lines.append("=============================")
             lines.append("> *Lệnh:* `/autohs on` | `/autohs off` | `/autohs ngoc` | `/autohs ve`")
             self.send_message(chat_id, "\n".join(lines))

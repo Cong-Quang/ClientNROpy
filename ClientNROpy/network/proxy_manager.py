@@ -44,19 +44,21 @@ class ProxyConfig:
 def parse_proxy(proxy_str: Union[str, ProxyConfig, None]) -> Optional[ProxyConfig]:
     """
     Phân tích chuỗi proxy thành ProxyConfig object.
-    Hỗ trợ các định dạng phổ biến:
-      1. socks5://user:pass@host:port
-      2. http://user:pass@host:port
+    Hỗ trợ toàn diện các định dạng phổ biến:
+      1. socks5://user:pass@host:port (hoặc kèm dấu gạch chéo '/')
+      2. http://user:pass@host:port (Webshare, BrightData, Oxylabs, ...)
       3. host:port:user:pass (Định dạng phổ biến khi mua proxy tại VN)
-      4. user:pass@host:port
-      5. host:port (Mặc định hiểu là socks5)
+      4. user:pass:host:port
+      5. host port user pass (Copy trực tiếp từ bảng Webshare / dấu cách / tab / dòng mới)
+      6. user:pass@host:port
+      7. host:port (Mặc định hiểu là socks5)
     """
     if not proxy_str:
         return None
     if isinstance(proxy_str, ProxyConfig):
         return proxy_str
 
-    s = proxy_str.strip()
+    s = str(proxy_str).strip()
     if not s:
         return None
 
@@ -74,14 +76,28 @@ def parse_proxy(proxy_str: Union[str, ProxyConfig, None]) -> Optional[ProxyConfi
         protocol = "socks5"
         s = s[9:]
 
+    # Loại bỏ dấu gạch chéo cuối nếu có từ copy-paste URL (vd: http://u:p@host:port/)
+    s = s.rstrip("/")
+
     username = None
     password = None
     host = ""
     port = 1080
 
-    # Dạng 1: user:pass@host:port
-    if "@" in s:
+    # Dạng copy bảng (khoảng trắng / tab / xuống dòng): host port user pass
+    tokens = s.split()
+    if len(tokens) >= 4 and tokens[1].isdigit():
+        host = tokens[0]
+        port = int(tokens[1])
+        username = tokens[2]
+        password = tokens[3]
+    elif len(tokens) == 2 and tokens[1].isdigit():
+        host = tokens[0]
+        port = int(tokens[1])
+    # Dạng URL: user:pass@host:port
+    elif "@" in s:
         auth_part, host_part = s.split("@", 1)
+        host_part = host_part.rstrip("/")
         if ":" in auth_part:
             username, password = auth_part.split(":", 1)
         else:
@@ -90,26 +106,36 @@ def parse_proxy(proxy_str: Union[str, ProxyConfig, None]) -> Optional[ProxyConfi
             h_parts = host_part.split(":", 1)
             host = h_parts[0]
             try:
-                port = int(h_parts[1])
+                port = int(h_parts[1].rstrip("/"))
             except ValueError:
                 port = 1080
         else:
             host = host_part
+    # Dạng phân tách bởi dấu hai chấm: host:port:user:pass hoặc user:pass:host:port
     else:
-        # Kiểm tra nếu có nhiều hơn 1 dấu hai chấm: host:port:user:pass
         parts = s.split(":")
         if len(parts) == 4:
-            host = parts[0]
-            try:
+            if parts[1].isdigit():
+                # host:port:user:pass
+                host = parts[0]
                 port = int(parts[1])
-            except ValueError:
-                port = 1080
-            username = parts[2]
-            password = parts[3]
+                username = parts[2]
+                password = parts[3]
+            elif parts[3].isdigit():
+                # user:pass:host:port
+                username = parts[0]
+                password = parts[1]
+                host = parts[2]
+                port = int(parts[3])
+            else:
+                host = parts[0]
+                port = int(parts[1]) if parts[1].isdigit() else 1080
+                username = parts[2]
+                password = parts[3]
         elif len(parts) == 2:
             host = parts[0]
             try:
-                port = int(parts[1])
+                port = int(parts[1].rstrip("/"))
             except ValueError:
                 port = 1080
         elif len(parts) == 1:
@@ -118,7 +144,7 @@ def parse_proxy(proxy_str: Union[str, ProxyConfig, None]) -> Optional[ProxyConfi
         else:
             host = parts[0]
             try:
-                port = int(parts[1])
+                port = int(parts[1].rstrip("/"))
             except ValueError:
                 port = 1080
 
