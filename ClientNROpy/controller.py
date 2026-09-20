@@ -765,9 +765,15 @@ class Controller(IMessageHandler):
 
                 from .logger import logger
                 logger.debug(f"Map loaded: {char.mapInfo}", account_tag=self.account_tag)
-                self.service.finishLoadMap()
-                for cb in self.on_map_info_callbacks:
-                    cb(char.mapInfo)
+                try:
+                    self.service.finishLoadMap()
+                except Exception as ex:
+                    logger.debug(f"[Controller] finishLoadMap error: {ex}", account_tag=self.account_tag)
+                for cb in list(self.on_map_info_callbacks):
+                    try:
+                        cb(char.mapInfo)
+                    except Exception as ex:
+                        logger.debug(f"[Controller] on_map_info callback error: {ex}", account_tag=self.account_tag)
                 return
 
             # ------------------------------------------------------------------
@@ -785,6 +791,12 @@ class Controller(IMessageHandler):
                 c.cgender = msg.reader().readByte()
                 c.head = msg.reader().readShort()
                 c.cName = msg.reader().readUTF()
+                if c.cName.startswith("$"):
+                    c.cName = c.cName[1:]
+                    c.isPet = True
+                elif c.cName.startswith("#"):
+                    c.cName = c.cName[1:]
+                    c.isMiniPet = True
                 c.cHP = msg.readInt3Byte()
                 c.cHPFull = msg.readInt3Byte()
                 c.body = msg.reader().readShort()

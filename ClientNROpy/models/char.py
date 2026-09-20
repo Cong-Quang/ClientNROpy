@@ -77,6 +77,8 @@ class Char:
         self.cFlag: int = 0
         self.isInvisiblez: bool = False
         self.isMonkey: int = 0
+        self.isPet: bool = False
+        self.isMiniPet: bool = False
 
         # Tiêu điểm nhắm (Focus) mô phỏng Char.cs trong C#
         self.mobFocus: Optional[Any] = None

@@ -27,6 +27,7 @@ from .display import (
     print_inventory,
     print_pet_info,
     print_map_and_zones,
+    print_find_entities,
     print_boss_list,
     print_hunt_status,
     print_quest_status,
@@ -59,6 +60,9 @@ CLI_ALIASES = {
     "khu": "zone",
     "mp": "map",
     "bando": "map",
+    "tim": "find",
+    "scan": "find",
+    "f": "find",
     "dau": "harvest",
     "nhatdau": "harvest",
     "thuhoach": "harvest",
@@ -84,7 +88,7 @@ CLI_ALIASES = {
 # Danh sách toàn bộ các lệnh hợp lệ để gợi ý khi người dùng gõ nhầm (Fuzzy suggestion)
 ALL_KNOWN_COMMANDS = [
     "status", "use", "all", "acc", "login", "logout", "reconnect",
-    "item", "zone", "map", "info", "bag", "box", "pet", "harvest",
+    "item", "zone", "map", "find", "tim", "info", "bag", "box", "pet", "harvest",
     "xmap", "goto", "hunt", "boss", "ak", "ts", "tansat",
     "anhat", "cnn", "nsq", "abf", "autohs", "hs", "auto", "trainpet", "trainacc",
     "nv", "autonv", "maintask", "nvchinh",
@@ -136,6 +140,11 @@ def execute_client_command(client: ClientNRO, line: str) -> bool:
     line = line.strip()
     if not line:
         return True
+
+    if line.startswith("/"):
+        line = line[1:].strip()
+        if not line:
+            return True
 
     tag = client.account_id if hasattr(client, "account_id") else "Client"
 
@@ -197,6 +206,10 @@ def execute_client_command(client: ClientNRO, line: str) -> bool:
 
     elif cmd == "map":
         print_map_and_zones(client.myChar.mapInfo)
+
+    elif cmd in ("find", "tim", "scan"):
+        q = " ".join(args).strip() if args else ""
+        print_find_entities(client, q)
 
     elif cmd in ("item", "timitem", "checkitem"):
         if not args:
@@ -507,20 +520,39 @@ def execute_client_command(client: ClientNRO, line: str) -> bool:
                 zone_id = getattr(client.myChar.mapInfo, "zoneID", -1)
 
             zone_str = f"Khu {zone_id:02d}" if zone_id >= 0 else "Chưa rõ khu"
+            revive_mode_str = "Hồi sinh bằng Ngọc tại chỗ" if st.get("revive_mode") == "gem" else "Hồi sinh Về thành"
+            revive_status_str = f"ĐANG BẬT [ON] ({revive_mode_str})" if st.get("auto_revive") else "ĐÃ TẮT [OFF]"
+
             print(f"\n=== TRẠNG THÁI AUTO NHIỆM VỤ CHÍNH TUYẾN [{tag}] ===")
             print(f"- Hoạt động:             {'ĐANG BẬT [ON]' if st.get('is_enabled') else 'ĐÃ TẮT [OFF]'}")
+            print(f"- Tự động hồi sinh:      {revive_status_str}")
             print(f"- Vị trí hiện tại:       {map_name} ({zone_str})")
             print(f"- Trạng thái FSM:        {st.get('state', 'N/A')}")
             print(f"- Chi tiết:              {st.get('status_message', 'N/A')}")
-            print(f"- Tiến trình:            {st.get('task_display', 'N/A')}\n")
+            print(f"- Tiến trình:            {st.get('task_display', 'N/A')}")
+            print(f"- Combo Skill Farm:      {st.get('combo_display', 'N/A')}\n")
+        elif any(x in ("combo", "skill", "skills") for x in subs):
+            sids = []
+            for a in args:
+                if a.isdigit():
+                    sids.append(int(a))
+            if sids:
+                ok, msg = client.set_combo_skills(sids)
+                logger.system(msg, account_tag=tag)
+            else:
+                print("Cú pháp: nv combo <skill_1> <skill_2> <skill_3> (Ví dụ: nv combo 1 9 0)")
         elif any(x in ("off", "stop", "0", "tat") for x in subs):
             client.stop_auto_main_task()
             logger.system("Auto Nhiệm Vụ Chính Tuyến: TẮT!", account_tag=tag)
         elif any(x in ("on", "start", "1", "bat") for x in subs):
             client.start_auto_main_task()
-            logger.system("Auto Nhiệm Vụ Chính Tuyến: BẬT!", account_tag=tag)
+            if hasattr(client, "auto_revive_manager") and hasattr(client.auto_revive_manager, "enable"):
+                client.auto_revive_manager.enable()
+            elif hasattr(client, "auto"):
+                client.auto.auto_revive = True
+            logger.system("Auto Nhiệm Vụ Chính Tuyến: BẬT! (Đã tự động kích hoạt Auto Hồi Sinh [ON])", account_tag=tag)
         else:
-            print("Cú pháp: nv [on|off|status]")
+            print("Cú pháp: nv [on|off|status|combo <id1> <id2> <id3>]")
 
     # Lệnh chiến đấu và tàn sát
     elif cmd == "focus":
@@ -562,6 +594,16 @@ def execute_client_command(client: ClientNRO, line: str) -> bool:
             elif sub in ("player", "char", "pk"):
                 client.toggle_tansat(True, mode="player")
                 logger.system("Tàn sát Người chơi (Auto PK): BẬT!", account_tag=tag)
+            elif sub in ("combo", "skill", "skills"):
+                sids = []
+                for a in args[1:]:
+                    if a.isdigit():
+                        sids.append(int(a))
+                if sids:
+                    ok, msg = client.set_combo_skills(sids)
+                    logger.system(msg, account_tag=tag)
+                else:
+                    print("Cú pháp: ts combo <skill_1> <skill_2> <skill_3> (Ví dụ: ts combo 1 9 0)")
             elif sub == "clear":
                 client.combat_manager.clear_mob_targets()
                 logger.system("Đã xoá bộ lọc quái (tàn sát tất cả quái trong map).", account_tag=tag)
@@ -594,6 +636,7 @@ def execute_client_command(client: ClientNRO, line: str) -> bool:
         print(f"\n=== CẤU HÌNH CHIẾN ĐẤU & TÀN SÁT [{tag}] ===")
         print(f"- Tự động đánh (AK):     {'BẬT' if st['is_ak'] else 'TẮT'}")
         print(f"- Tàn sát:               {'BẬT' if st['is_tansat'] else 'TẮT'} (Mode: {st['tansat_mode']})")
+        print(f"- Combo Skill Pem/Farm:  {st.get('combo_display', 'N/A')}")
         print(f"- Tự nhặt đồ:            {'BẬT' if st['auto_pick'] else 'TẮT'}")
         print(f"- Chỉ nhặt ngọc:         {'BẬT' if st['pick_gem_only'] else 'TẮT'}")
         print(f"- Tự dùng đậu:           {'BẬT' if st['auto_pean'] else 'TẮT'}\n")
@@ -749,6 +792,11 @@ def execute_multi_command(
     line = line.strip()
     if not line:
         return True, active_target
+
+    if line.startswith("/"):
+        line = line[1:].strip()
+        if not line:
+            return True, active_target
 
     parts = line.split()
     cmd = parts[0].lower()

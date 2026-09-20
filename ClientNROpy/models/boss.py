@@ -33,6 +33,16 @@ class Boss:
         self.is_died: bool = is_died
         self.killer: str = killer.strip()
 
+    def __eq__(self, other: Any) -> bool:
+        if not isinstance(other, Boss):
+            return False
+        return (
+            self.name == other.name
+            and self.map_id == other.map_id
+            and self.zone_id == other.zone_id
+            and self.is_died == other.is_died
+        )
+
     @property
     def time_alive_seconds(self) -> int:
         """Tổng số giây đã trôi qua kể từ khi Boss xuất hiện."""

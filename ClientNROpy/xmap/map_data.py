@@ -102,6 +102,10 @@ def resolve_map_id(query: Union[int, str], cgender: int = 0) -> Optional[int]:
     if norm in ("san sau sieu thi", "san sau", "sieu thi sau"):
         return 104
 
+    # 7c. Alias Mê cung chết chóc = Vực chết (Map 67)
+    if norm in ("me cung chet choc", "me cung", "me cung chet", "vuc chet"):
+        return 67
+
     # 8. Alias các map mới của TDStudio
     if norm in ("dia nguc", "hell"):
         return 206

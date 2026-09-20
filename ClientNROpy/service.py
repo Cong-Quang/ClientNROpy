@@ -197,6 +197,14 @@ class Service:
         except Exception as ex:
             print(f"[Service] requestChangeMap error: {ex}")
 
+    def finishLoadMap(self) -> None:
+        """Báo cho server đã tải xong map (cmd -39 trong C# Service.cs). Server sẽ gửi danh sách nhân vật/boss trong map."""
+        try:
+            m = Message(-39)
+            self.session.sendMessage(m)
+        except Exception as ex:
+            print(f"[Service] finishLoadMap error: {ex}")
+
     def openUIZone(self) -> None:
         """Yêu cầu danh sách các khu vực (Zone) trong map hiện tại (cmd 29)."""
         try:

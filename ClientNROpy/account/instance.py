@@ -145,6 +145,13 @@ class AccountInstance:
                     "rounds": getattr(auto, "shuttle_rounds", 0),
                 }
 
+            # 11. Nhiệm vụ chính tuyến (NV)
+            if getattr(auto, "is_main_task_enabled", False):
+                active_tasks.append("nv")
+                state["nv"] = {
+                    "combo_skills": list(getattr(auto, "combat_combo_skills", [])) if getattr(auto, "combat_combo_skills", None) else None,
+                }
+
             self.saved_auto_state = state
             self.saved_auto_tasks = active_tasks
         except Exception:
@@ -257,6 +264,14 @@ class AccountInstance:
                 if map_a is not None and map_b is not None:
                     self.client.start_shuttle(map_a, map_b, rounds)
                     restored.append(f"Shuttle({map_a}<->{map_b})")
+
+            # 10. Nhiệm vụ chính tuyến (NV)
+            if "nv" in tasks or "nv" in state:
+                nv_cfg = state.get("nv", {}) if isinstance(state.get("nv"), dict) else {}
+                if nv_cfg.get("combo_skills"):
+                    auto.combat_combo_skills = list(nv_cfg["combo_skills"])
+                self.client.start_auto_main_task()
+                restored.append("NV")
 
             if restored:
                 logger.system(f"Đã tự động khôi phục các lệnh/tác vụ: {', '.join(restored)}", account_tag=self.tag)

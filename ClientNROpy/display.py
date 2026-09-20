@@ -18,7 +18,8 @@ from .pet import Pet
 from .magic_tree import MagicTree
 from .map_info import MapInfo
 from .client import ClientNRO
-from .game_data import format_big_number, get_item_name, SKILL_NAMES
+from .game_data import format_big_number, get_item_name, SKILL_NAMES, MOB_NAMES, get_mob_name, get_map_name
+import re
 
 
 # ============================================================
@@ -323,11 +324,23 @@ def print_map_and_zones(map_info: MapInfo):
         print("  Không có người chơi khác.")
     else:
         for pid, c in list(map_info.chars.items()):
+            c_name = getattr(c, "cName", "")
+            tag_str = ""
+            if getattr(c, "isPet", False) or c_name.startswith("$"):
+                tag_str = " [PET]"
+                if not c_name or c_name == "$":
+                    c_name = "<Pet>"
+            elif getattr(c, "isMiniPet", False) or c_name.startswith("#"):
+                tag_str = " [MINI-PET]"
+                if not c_name or c_name == "#":
+                    c_name = "<MiniPet>"
+            elif not c_name:
+                c_name = "<Không rõ>"
             print(
-                f"  {c.cName} "
+                f"  {c_name} "
                 f"(ID: {pid}) | "
                 f"HP: {c.cHP:,}/{c.cHPFull:,} | "
-                f"Tọa độ: ({c.cx}, {c.cy})"
+                f"Tọa độ: ({c.cx}, {c.cy}){tag_str}"
             )
 
     _print_section(f"QUÁI VẬT TRONG KHU ({len(map_info.mobs)})")
@@ -361,6 +374,123 @@ def print_map_and_zones(map_info: MapInfo):
                 f"  {wp.name}: "
                 f"({wp.minX},{wp.minY}) -> ({wp.maxX},{wp.maxY})"
             )
+
+
+def print_find_entities(client: ClientNRO, query: str = "") -> None:
+    """
+    Dò quét và hiển thị toàn bộ Nhân vật (Chars), Quái vật (Mobs) và Boss trong map/khu vực.
+    Hiển thị đầy đủ thông tin kỹ thuật: ID, Tên, cTypePk, HP/MaxHP, Tọa độ, Khoảng cách, Trạng thái.
+    """
+    my_char = client.myChar
+    map_info = my_char.mapInfo if my_char else None
+    if not map_info:
+        print("Chưa có thông tin bản đồ.")
+        return
+
+    map_name = getattr(map_info, "mapName", "") or get_map_name(map_info.mapID)
+    zone_id = getattr(map_info, "zoneID", -1)
+    q = query.lower().strip()
+
+    _print_title(f"DÒ QUÉT THỰC THỂ TRONG BẢN ĐỒ: {map_name} (ID: {map_info.mapID}, Khu: {zone_id:02d})", 78)
+    print(f"Nhân vật chính: {my_char.cName} (ID: {my_char.charID}) | Tọa độ: ({my_char.cx}, {my_char.cy}) | HP: {my_char.cHP:,}/{my_char.cHPFull:,}")
+    if q:
+        print(f"Bộ lọc tìm kiếm: '{q}'")
+
+    # 1. BOSS & CÁC THỰC THỂ ĐẶC BIỆT
+    bosses = []
+    # Quét trong chars
+    for pid, c in list(map_info.chars.items()):
+        if c is None or c.charID == my_char.charID:
+            continue
+        c_name = getattr(c, "cName", "")
+        clean_c = re.sub(r"\\[cC]\d+|\|\d+\||\[.*?\]", "", c_name).strip()
+        # Bỏ qua pet và mini-pet
+        if getattr(c, "isPet", False) or getattr(c, "isMiniPet", False) or clean_c.startswith("$") or clean_c.startswith("#") or not clean_c:
+            continue
+        is_pk_boss = (getattr(c, "cTypePk", 0) == 5)
+        is_neg_id = (getattr(c, "charID", 0) < 0)
+        is_known_boss = any(b in clean_c.lower() for b in ("kuku", "mập đầu đinh", "rambo", "broly", "fide", "xên", "super", "tiểu đội", "số "))
+        if is_pk_boss or is_neg_id or is_known_boss:
+            bosses.append(("char", pid, c, clean_c, c_name))
+
+    # Quét trong mobs
+    for mid, m in list(map_info.mobs.items()):
+        if getattr(m, "isBoss", False):
+            m_name = MOB_NAMES.get(getattr(m, "templateId", -1), f"Mob#{mid}")
+            bosses.append(("mob", mid, m, m_name, m_name))
+
+    # Lọc theo query nếu có
+    if q and q not in ("all", "*"):
+        bosses = [b for b in bosses if q in b[3].lower() or q in b[4].lower() or q == "boss" or q in str(b[1])]
+
+    _print_section(f"BOSS TRONG KHU VỰC ({len(bosses)})")
+    if not bosses:
+        print("  Không phát hiện Boss trong khu vực này.")
+    else:
+        for b_type, b_id, obj, b_name, b_raw in bosses:
+            if b_type == "char":
+                dist = int(my_char.distance_to(obj.cx, obj.cy))
+                pk_str = f"cTypePk={obj.cTypePk}"
+                if getattr(obj, "statusMe", 1) == 14 or getattr(obj, "isDie", False):
+                    status_str = "ĐÃ CHẾT (statusMe=14)"
+                elif obj.cHP <= 0:
+                    status_str = "ĐANG NÓI CHUYỆN (cHP=0, chờ lên máu đỏ)"
+                else:
+                    status_str = "MÁU ĐỎ (SẴN SÀNG ĐÁNH)"
+                raw_info = f" [Raw: '{b_raw}']" if b_raw != b_name else ""
+                print(f"  * [BOSS CHAR] {b_name} (ID: {b_id}){raw_info}")
+                print(f"      - Chỉ số:      {pk_str} | HP: {obj.cHP:,}/{obj.cHPFull:,} | statusMe: {getattr(obj, 'statusMe', 1)}")
+                print(f"      - Vị trí:      Tọa độ ({obj.cx}, {obj.cy}) [Cách nhân vật {dist}m]")
+                print(f"      - Trạng thái:  {status_str}")
+            else:
+                dist = int(my_char.distance_to(obj.x, obj.y))
+                print(f"  * [BOSS MOB] {b_name} (ID: {b_id})")
+                print(f"      - Chỉ số:      HP: {obj.hp:,}/{obj.maxHp:,} | Template: {getattr(obj, 'templateId', -1)}")
+                print(f"      - Vị trí:      Tọa độ ({obj.x}, {obj.y}) [Cách nhân vật {dist}m]")
+
+    # 2. TOÀN BỘ NHÂN VẬT / NGƯỜI CHƠI (CHARS)
+    chars = list(map_info.chars.items())
+    if q and q not in ("all", "*"):
+        chars = [(pid, c) for pid, c in chars if q in getattr(c, "cName", "").lower() or q in str(pid) or q == "char"]
+
+    _print_section(f"NHÂN VẬT / NGƯỜI CHƠI TRONG KHU ({len(chars)})")
+    if not chars:
+        print("  Không có nhân vật nào trong khu.")
+    else:
+        for pid, c in chars:
+            dist = int(my_char.distance_to(c.cx, c.cy))
+            pk_str = f"cTypePk={c.cTypePk}"
+            dead_str = " [ĐÃ CHẾT]" if (getattr(c, "statusMe", 1) == 14 or getattr(c, "isDie", False)) else ""
+            c_name = getattr(c, "cName", "")
+            tag_str = ""
+            if getattr(c, "isPet", False) or c_name.startswith("$"):
+                tag_str = " [PET]"
+                if not c_name or c_name == "$":
+                    c_name = "<Pet>"
+            elif getattr(c, "isMiniPet", False) or c_name.startswith("#"):
+                tag_str = " [MINI-PET]"
+                if not c_name or c_name == "#":
+                    c_name = "<MiniPet>"
+            print(f"  ID: {pid:<10} | Tên: {c_name:<18} | {pk_str} | HP: {c.cHP:>10,}/{c.cHPFull:<10,} | Tọa độ: ({c.cx:>4}, {c.cy:>4}) [{dist:>3}m]{dead_str}{tag_str}")
+
+    # 3. TOÀN BỘ QUÁI VẬT (MOBS)
+    mobs = list(map_info.mobs.items())
+    if q and q not in ("all", "*"):
+        mobs = [(mid, m) for mid, m in mobs if q in MOB_NAMES.get(getattr(m, "templateId", -1), "").lower() or q in str(mid) or q in str(getattr(m, "templateId", -1)) or q == "mob"]
+
+    _print_section(f"QUÁI VẬT TRONG KHU ({len(mobs)})")
+    if not mobs:
+        print("  Không có quái vật nào trong khu.")
+    else:
+        for mid, m in mobs[:25]:
+            dist = int(my_char.distance_to(m.x, m.y))
+            m_name = MOB_NAMES.get(getattr(m, "templateId", -1), f"Template {m.templateId}")
+            boss_tag = " [BOSS]" if getattr(m, "isBoss", False) else ""
+            print(f"  #{mid:<3} | {m_name:<18} (Tpl: {m.templateId:>2}) | HP: {m.hp:>8,}/{m.maxHp:<8,} | Tọa độ: ({m.x:>4}, {m.y:>4}) [{dist:>3}m]{boss_tag}")
+        if len(mobs) > 25:
+            print(f"  ... và còn {len(mobs) - 25} quái vật khác.")
+
+    print("=" * 78)
 
 
 # ============================================================
@@ -726,6 +856,11 @@ COMMAND_HELP_GROUPS = [
                 "tg": "/goto <m> min ts",
                 "cli": "goto <map> [min|khu] [ts]",
                 "desc": "Combo: tới map -> chọn khu vắng -> bật tàn sát",
+            },
+            {
+                "tg": "/find [tên]",
+                "cli": "find / tim [tên|boss|all]",
+                "desc": "Dò quét toàn bộ nhân vật, quái vật và Boss trong khu với đầy đủ chỉ số",
             },
         ],
     },
