@@ -168,20 +168,21 @@ class TelegramAIBot:
 
         if mode == "control":
             return menu([
+                ["Bật auto nhiệm vụ", "Tắt auto nhiệm vụ"],
+                ["Trạng thái nhiệm vụ", "Thu hoạch đậu"],
                 ["Bật tàn sát", "Tắt tàn sát"],
                 ["Bật tự đánh", "Tắt tự đánh"],
                 ["Bật săn Boss", "Tắt săn Boss"],
-                ["Bật tự nhặt đồ", "Tắt tự nhặt đồ"],
-                ["Bật tự hồi sinh", "Tắt tự hồi sinh"],
-                ["Thu hoạch đậu", "Đăng nhập"],
-                ["Đăng xuất", "Quay lại"],
+                ["Bật tự nhặt đồ", "Tắt tự hồi sinh"],
+                ["Đăng nhập", "Đăng xuất"],
+                ["Quay lại"],
             ])
 
         if mode == "boss":
             return menu([
                 ["Xem Boss hiện tại", "Bật săn Boss"],
                 ["Tắt săn Boss", "Đi tới Boss"],
-                ["Quay lại"],
+                ["Trạng thái nhiệm vụ", "Quay lại"],
             ])
 
         if mode == "help":

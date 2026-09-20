@@ -542,15 +542,15 @@ def execute_client_command(client: ClientNRO, line: str) -> bool:
             else:
                 print("Cú pháp: nv combo <skill_1> <skill_2> <skill_3> (Ví dụ: nv combo 1 9 0)")
         elif any(x in ("off", "stop", "0", "tat") for x in subs):
-            client.stop_auto_main_task()
-            logger.system("Auto Nhiệm Vụ Chính Tuyến: TẮT!", account_tag=tag)
+            ok, msg = client.stop_auto_main_task()
+            logger.system(msg, account_tag=tag)
         elif any(x in ("on", "start", "1", "bat") for x in subs):
-            client.start_auto_main_task()
+            ok, msg = client.start_auto_main_task()
             if hasattr(client, "auto_revive_manager") and hasattr(client.auto_revive_manager, "enable"):
                 client.auto_revive_manager.enable()
             elif hasattr(client, "auto"):
                 client.auto.auto_revive = True
-            logger.system("Auto Nhiệm Vụ Chính Tuyến: BẬT! (Đã tự động kích hoạt Auto Hồi Sinh [ON])", account_tag=tag)
+            logger.system(msg, account_tag=tag)
         else:
             print("Cú pháp: nv [on|off|status|combo <id1> <id2> <id3>]")
 
