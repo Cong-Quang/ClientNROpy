@@ -122,6 +122,21 @@ from .game_data import (
     search_npcs,
 )
 
+# 8. Module Thu Thập Dữ Liệu AI (Data Collector)
+from .data_collector import (
+    DataCollector,
+    get_data_collector,
+    build_state_text,
+    ACTION_ATTACK,
+    ACTION_QUEST,
+    ACTION_HEAL,
+    ACTION_RETREAT,
+    ACTION_SKILL,
+    ACTION_NAMES,
+    ACTION_DESCRIPTIONS,
+    COMMAND_TO_ACTION,
+)
+
 __all__ = [
     "myReader",
     "myWriter",
@@ -197,5 +212,16 @@ __all__ = [
     "AccountManager",
     "ProxyConfig",
     "ProxyPool",
+    "DataCollector",
+    "get_data_collector",
+    "build_state_text",
+    "ACTION_ATTACK",
+    "ACTION_QUEST",
+    "ACTION_HEAL",
+    "ACTION_RETREAT",
+    "ACTION_SKILL",
+    "ACTION_NAMES",
+    "ACTION_DESCRIPTIONS",
+    "COMMAND_TO_ACTION",
 ]
 

@@ -22,6 +22,7 @@ from .chat_vip import ChatVip
 from .boss import Boss
 from .auto_manager import AutoManager
 from .xmap import XmapController, MapNext
+from .data_collector import DataCollector, get_data_collector
 
 
 class ClientNRO:
@@ -61,6 +62,9 @@ class ClientNRO:
 
         # Module Tự Động Hóa Hợp Nhất (Unified Auto Engine - 1 Worker Thread)
         self.auto: AutoManager = AutoManager(self)
+
+        # Module Thu Thập Dữ Liệu Tự Động (Data Collector) Cho AI
+        self.data_collector: DataCollector = get_data_collector(client=self)
 
         # Các thuộc tính bí danh giữ tương thích ngược 100%
         self.combat_manager: AutoManager = self.auto

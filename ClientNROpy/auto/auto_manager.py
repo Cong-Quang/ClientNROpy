@@ -1086,6 +1086,11 @@ class AutoManager:
         ki_ratio = my_char.cMP / max(1, my_char.cMPFull)
 
         if hp_ratio <= self.pean_threshold or ki_ratio <= self.pean_threshold:
+            # Hook Auto Routine Tagging: Bơm máu / Ăn đậu (Label 2)
+            collector = getattr(self.client, "data_collector", None)
+            if collector and collector.is_recording:
+                collector.record_sample(self.client, 2)
+
             svc = self._service()
             if not svc:
                 return
@@ -1315,6 +1320,13 @@ class AutoManager:
                     my_char.skillTemplateId = skill_id
             except Exception:
                 pass
+
+        # Hook Auto Routine Tagging: Tấn công quái (Label 0) hoặc Tung skill combo (Label 4)
+        collector = getattr(self.client, "data_collector", None)
+        if collector and collector.is_recording:
+            act_id = 4 if (skill_id is not None and skill_id not in (0, 2, 4)) else 0
+            t_obj = vMob[0] if vMob else (vChar[0] if vChar else None)
+            collector.record_sample(self.client, act_id, target=t_obj)
 
         try:
             svc.sendPlayerAttack(vMob=vMob, vChar=vChar)
@@ -2673,6 +2685,11 @@ class AutoManager:
 
     def _step_auto_quest(self, my_char: Char) -> None:
         """Thực thi một bước trong máy trạng thái Bò Mộng."""
+        # Hook Auto Routine Tagging: Làm nhiệm vụ (Label 1)
+        collector = getattr(self.client, "data_collector", None)
+        if collector and collector.is_recording:
+            collector.record_sample(self.client, 1)
+
         curr_map = getattr(my_char.mapInfo, "mapID", -1)
 
         # Kiểm tra nếu Xmap đang di chuyển thì đợi, tuyệt đối không spam xmap liên tục
@@ -3283,6 +3300,11 @@ class AutoManager:
 
     def _step_main_task(self, my_char: Char) -> None:
         """Thực thi một chu kỳ làm nhiệm vụ chính tuyến."""
+        # Hook Auto Routine Tagging: Làm nhiệm vụ (Label 1)
+        collector = getattr(self.client, "data_collector", None)
+        if collector and collector.is_recording:
+            collector.record_sample(self.client, 1)
+
         now = time.time()
         info = self._parse_main_task_info(my_char)
         if not info or not info.is_valid:

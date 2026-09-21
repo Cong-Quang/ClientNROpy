@@ -83,6 +83,9 @@ CLI_ALIASES = {
     "autonv": "nv",
     "maintask": "nv",
     "nvchinh": "nv",
+    "savedata": "save_data",
+    "rec": "record",
+    "ghidulieu": "record",
 }
 
 # Danh sách toàn bộ các lệnh hợp lệ để gợi ý khi người dùng gõ nhầm (Fuzzy suggestion)
@@ -93,6 +96,7 @@ ALL_KNOWN_COMMANDS = [
     "anhat", "cnn", "nsq", "abf", "autohs", "hs", "auto", "trainpet", "trainacc",
     "nv", "autonv", "maintask", "nvchinh",
     "nvbm", "shuttle", "chat", "cls", "clear", "log", "mute",
+    "record", "save_data",
     "telegram", "proxy", "help", "exit", "quit"
 ]
 
@@ -162,8 +166,18 @@ def execute_client_command(client: ClientNRO, line: str) -> bool:
         cmd = CLI_ALIASES[cmd]
     args = parts[1:]
 
+    # Hook Imitation Learning: Chụp snapshot trạng thái trước khi thực thi lệnh
+    from .data_collector import COMMAND_TO_ACTION
+    if cmd in COMMAND_TO_ACTION:
+        collector = getattr(client, "data_collector", None)
+        if collector and collector.is_recording:
+            collector.record_sample(client, cmd)
+
     if cmd in ("exit", "quit", "q"):
         logger.system("Đang đăng xuất tài khoản...", account_tag=tag)
+        collector = getattr(client, "data_collector", None)
+        if collector and collector.samples:
+            collector.save_dataset(async_save=False)
         client.logout()
         return False
 
@@ -717,6 +731,59 @@ def execute_client_command(client: ClientNRO, line: str) -> bool:
         else:
             print("Cú pháp: trainacc [on|off|status]")
 
+    elif cmd in ("record", "rec"):
+        collector = getattr(client, "data_collector", None)
+        if not collector:
+            print("[!] Module thu thập dữ liệu (DataCollector) chưa được khởi tạo!")
+            return True
+
+        if not args or args[0].lower() in ("status", "st", "info"):
+            stats = collector.get_stats()
+            st_str = "ĐANG BẬT [ON]" if stats["is_recording"] else "ĐÃ TẮT [OFF]"
+            print(f"\n=== TRẠNG THÁI THU THẬP DỮ LIỆU AI [{tag}] ===")
+            print(f"- Hoạt động:        {st_str}")
+            print(f"- Tổng số mẫu:      {stats['total_samples']} mẫu")
+            print(f"- Phân bố nhãn:")
+            from .data_collector import ACTION_NAMES, ACTION_DESCRIPTIONS
+            for l_id, l_name in ACTION_NAMES.items():
+                cnt = stats["label_counts"].get(l_id, 0)
+                desc = ACTION_DESCRIPTIONS.get(l_id, "")
+                pct = (cnt / max(1, stats['total_samples'])) * 100
+                print(f"    Label {l_id} ({l_name:<7}): {cnt:>4} mẫu ({pct:>5.1f}%) - {desc}")
+            print(f"- Thư mục lưu:      {stats['output_dir']}\n")
+            print("Cú pháp: record on | record off | record save | record clear")
+            return True
+
+        sub = args[0].lower()
+        if sub in ("on", "start", "enable", "1", "true"):
+            collector.start_recording()
+            print(f"[*] Đã BẬT thu thập dữ liệu AI cho [{tag}]! Hệ thống sẽ tự động ghi lại trạng thái & hành động.")
+            return True
+
+        elif sub in ("off", "stop", "disable", "0", "false"):
+            collector.stop_recording()
+            print(f"[*] Đã TẮT thu thập dữ liệu AI cho [{tag}].")
+            return True
+
+        elif sub in ("save", "export", "luu"):
+            train_c, val_c = collector.save_dataset()
+            print(f"[*] Đang lưu dữ liệu: {train_c} mẫu train, {val_c} mẫu val...")
+            return True
+
+        elif sub in ("clear", "xoa", "reset"):
+            collector.clear()
+            print(f"[*] Đã xóa toàn bộ mẫu dữ liệu tạm thời trong bộ nhớ.")
+            return True
+
+    elif cmd in ("save_data", "savedata"):
+        collector = getattr(client, "data_collector", None)
+        if collector:
+            train_c, val_c = collector.save_dataset()
+            print(f"[*] Đang lưu dữ liệu: {train_c} mẫu train, {val_c} mẫu val...")
+        else:
+            print("[!] Không tìm thấy DataCollector!")
+        return True
+
     else:
         matches = difflib.get_close_matches(cmd, ALL_KNOWN_COMMANDS, n=2, cutoff=0.55)
         if matches:
@@ -806,8 +873,54 @@ def execute_multi_command(
 
     # 1. Thoát chương trình
     if cmd in ("exit", "quit", "q"):
+        from .data_collector import get_data_collector
+        collector = get_data_collector()
+        if collector and collector.samples:
+            collector.save_dataset(async_save=False)
         account_manager.stop_all()
         return False, active_target
+
+    # 1b. Quản lý Thu thập dữ liệu AI toàn cục (record / save_data)
+    if cmd in ("record", "rec", "save_data", "savedata"):
+        from .data_collector import get_data_collector, ACTION_NAMES, ACTION_DESCRIPTIONS
+        collector = get_data_collector()
+
+        if cmd in ("save_data", "savedata") or (args and args[0].lower() in ("save", "export", "luu")):
+            train_c, val_c = collector.save_dataset()
+            print(f"[*] Đang lưu dữ liệu: {train_c} mẫu train, {val_c} mẫu val...")
+            return True, active_target
+
+        if not args or args[0].lower() in ("status", "st", "info"):
+            stats = collector.get_stats()
+            st_str = "ĐANG BẬT [ON]" if stats["is_recording"] else "ĐÃ TẮT [OFF]"
+            print(f"\n=== TRẠNG THÁI THU THẬP DỮ LIỆU AI TOÀN CỤC ===")
+            print(f"- Hoạt động:        {st_str}")
+            print(f"- Tổng số mẫu:      {stats['total_samples']} mẫu")
+            print(f"- Phân bố nhãn:")
+            for l_id, l_name in ACTION_NAMES.items():
+                cnt = stats["label_counts"].get(l_id, 0)
+                desc = ACTION_DESCRIPTIONS.get(l_id, "")
+                pct = (cnt / max(1, stats['total_samples'])) * 100
+                print(f"    Label {l_id} ({l_name:<7}): {cnt:>4} mẫu ({pct:>5.1f}%) - {desc}")
+            print(f"- Thư mục lưu:      {stats['output_dir']}\n")
+            print("Cú pháp: record on | record off | save_data | record clear")
+            return True, active_target
+
+        sub = args[0].lower()
+        if sub in ("on", "start", "enable", "1", "true"):
+            collector.start_recording()
+            print("[*] Đã BẬT thu thập dữ liệu AI toàn cục! Sẽ tự động ghi nhận trạng thái & hành động.")
+            return True, active_target
+
+        elif sub in ("off", "stop", "disable", "0", "false"):
+            collector.stop_recording()
+            print("[*] Đã TẮT thu thập dữ liệu AI toàn cục.")
+            return True, active_target
+
+        elif sub in ("clear", "xoa", "reset"):
+            collector.clear()
+            print("[*] Đã xóa toàn bộ mẫu dữ liệu tạm thời trong bộ nhớ.")
+            return True, active_target
 
     # 2. Xoá màn hình
     if cmd in ("cls", "clear"):

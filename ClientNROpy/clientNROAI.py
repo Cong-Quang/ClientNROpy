@@ -19,7 +19,7 @@ import struct
 import sys
 import threading
 import time
-from typing import Optional, List, Dict, Any, Union, Callable
+from typing import Optional, List, Dict, Any, Union, Callable, Tuple
 
 # Đảm bảo console Windows hỗ trợ in Unicode tiếng Việt
 if hasattr(sys.stdout, "reconfigure"):
@@ -1311,6 +1311,13 @@ class ClientNROAI:
         # Đăng ký Controller tiếp nhận thông điệp mạng từ Session_ME
         self.session.setHandler(self.controller)
 
+        # Module Thu Thập Dữ Liệu Tự Động (Data Collector) Cho Mô Hình AI
+        try:
+            from .data_collector import DataCollector, get_data_collector
+            self.data_collector: Optional[DataCollector] = get_data_collector(client=self)
+        except Exception:
+            self.data_collector = None
+
     # --------------------------------------------------------------------------
     # 1. KẾT NỐI & ĐĂNG NHẬP
     # --------------------------------------------------------------------------
@@ -1480,6 +1487,9 @@ class ClientNROAI:
 
     def attack_mob(self, mob_id: int) -> None:
         """Tấn công quái vật theo ID."""
+        if self.data_collector and self.data_collector.is_recording:
+            mob = self.myChar.mapInfo.mobs.get(mob_id)
+            self.data_collector.record_sample(self, 0, target=mob)
         self.service.sendPlayerAttack(mob_ids=[mob_id])
 
     def attack_player(self, char_id: int) -> None:
@@ -1492,10 +1502,14 @@ class ClientNROAI:
 
     def use_item(self, index: int = -1, template_id: int = -1) -> None:
         """Sử dụng vật phẩm trong hành trang theo vị trí slot hoặc template ID."""
+        if self.data_collector and self.data_collector.is_recording:
+            self.data_collector.record_sample(self, 2)
         self.service.useItem(where=1, index=index, template=template_id)
 
     def change_zone(self, zone_id: int) -> None:
         """Đổi sang khu vực (zone) chỉ định trong map."""
+        if self.data_collector and self.data_collector.is_recording:
+            self.data_collector.record_sample(self, 3)
         self.service.requestChangeZone(zone_id)
 
     def request_zones(self) -> None:
@@ -1535,7 +1549,31 @@ class ClientNROAI:
 
     def select_skill(self, skill_template_id: int) -> None:
         """Chọn skill xuất chiêu."""
+        if self.data_collector and self.data_collector.is_recording:
+            if skill_template_id not in (0, 2, 4):
+                self.data_collector.record_sample(self, 4)
         self.service.selectSkill(skill_template_id)
+
+    # --------------------------------------------------------------------------
+    # 4. HÀM THU THẬP DỮ LIỆU CHO AI (DATA COLLECTION CONTROLS)
+    # --------------------------------------------------------------------------
+    def start_recording(self) -> bool:
+        """Bật chế độ ghi nhận dữ liệu AI."""
+        if self.data_collector:
+            return self.data_collector.start_recording()
+        return False
+
+    def stop_recording(self) -> bool:
+        """Dừng chế độ ghi nhận dữ liệu AI."""
+        if self.data_collector:
+            return self.data_collector.stop_recording()
+        return False
+
+    def save_dataset(self, train_ratio: float = 0.8, output_dir: Optional[str] = None) -> Tuple[int, int]:
+        """Lưu tập dữ liệu chia train/val 80/20."""
+        if self.data_collector:
+            return self.data_collector.save_dataset(train_ratio=train_ratio, output_dir=output_dir)
+        return 0, 0
 
 
 # ==============================================================================
